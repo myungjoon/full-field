@@ -78,15 +78,43 @@ def plot_beam_intensity(field, indices=None, extent=None, interpolation=None):
     ylabel = np.linspace(extent[2], extent[3], 5)
 
     if interpolation is not None:
-        im = ax.imshow(np.abs(field)**2, cmap='jet', interpolation=interpolation)
+        im = ax.imshow(np.abs(field)**2, cmap='turbo', interpolation=interpolation)
     else:
-        im = ax.imshow(np.abs(field)**2, cmap='jet',)
+        im = ax.imshow(np.abs(field)**2, cmap='turbo',)
     ax.set_xticks(xtick)
     ax.set_yticks(ytick)
     ax.set_xticklabels([f'{x}' for x in xlabel])
     ax.set_yticklabels([f'{y}' for y in ylabel])
-    # ax.set_xlim(-3001, 3001)
-    # ax.set_ylim(-3001, 3001)
+
+    ax.set_xlabel(r'x ($\mu m$)')
+    ax.set_ylabel(r'y ($\mu m$)')
+    # colorbar
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.1)
+    fig.colorbar(im, cax=cax)
+
+    if indices is not None:
+        ax.contour(indices, levels=[np.min(indices)], colors='white', linewidths=2)
+
+def plot_beam_phase(field, indices=None, extent=None, interpolation=None):
+    fig, ax = plt.subplots()
+    
+    eps = 1e-5
+    extent = [-75, 75, -75, 75]
+    xtick = np.linspace(0, field.shape[1]+eps, 5)
+    ytick = np.linspace(0, field.shape[0]+eps, 5)
+    xlabel = np.linspace(extent[0], extent[1], 5)
+    ylabel = np.linspace(extent[2], extent[3], 5)
+
+    if interpolation is not None:
+        im = ax.imshow(np.angle(field), cmap='turbo', interpolation=interpolation)
+    else:
+        im = ax.imshow(np.angle(field), cmap='turbo',)
+    ax.set_xticks(xtick)
+    ax.set_yticks(ytick)
+    ax.set_xticklabels([f'{x}' for x in xlabel])
+    ax.set_yticklabels([f'{y}' for y in ylabel])
+
     ax.set_xlabel(r'x ($\mu m$)')
     ax.set_ylabel(r'y ($\mu m$)')
     # colorbar

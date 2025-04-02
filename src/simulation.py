@@ -4,7 +4,7 @@ import mmfsim.grid as grids
 from mmfsim.coupling import GrinFiberCoupler
 from mmfsim.fiber import GrinFiber
 from mmfsim.modes import GrinLPMode
-from modes import calculate_modes, decompose_modes, n_to_lm
+from .modes import calculate_modes, decompose_modes, n_to_lm
 
 from tqdm import tqdm
 
@@ -67,6 +67,9 @@ class Fiber:
         n[torch.where(R > self.radius)] = self.n_clad
         
         n[torch.where(R <= self.radius)] = self.n_core * torch.sqrt(1 - 2 * delta * (R[torch.where(R <= self.radius)]/self.radius)**2) 
+        # Delta = (self.n_core - self.n_clad) / self.n_core
+        # n[torch.where(R <= self.radius)] = self.n_core * torch.sqrt(1 - 2 * Delta * (R[torch.where(R <= self.radius)] / self.radius)**2)
+
         n = n + perturbation
 
         return n.to(self.device)
@@ -86,7 +89,7 @@ class Input:
         if type=="gaussian":
             self.field = self.gaussian_beam(beam_radius, cx=cx, cy=cy, noise=noise)
         elif type=="mode":
-            self.field = self.LP_modes(l, m)
+            self.field, self.beta = self.LP_modes(l, m)
         elif type=="random":
             self.field = self.mode_mixing(num_mode, coefficients)            
         else:
@@ -110,7 +113,13 @@ class Input:
         if self.normalization:
             summation = torch.sum(torch.abs(field)**2)
             field = field / torch.sqrt(summation)
-        return field.to(self.device)
+
+        # Calculate the propagation constant for the mode
+        k0 = 2 * np.pi / self.wvl0
+        Delta = (self.n_core - self.n_clad) / self.n_core
+        beta = self.n_core * k0 * np.sqrt(1 - 2 * (2*m + l - 1) * np.sqrt(2*Delta) / self.n_core / k0 / self.radius)
+
+        return field.to(self.device), beta
 
     def mode_mixing(self, num_mode, coefficients=None,):
         grid = grids.Grid(pixel_size=self.domain.Lx/self.domain.Nx, pixel_numbers=(self.domain.Nx, self.domain.Ny))
@@ -134,7 +143,6 @@ class Input:
             
         total_field = total_field * self.amp
                 
-        
         return total_field.to(self.device)
 
             
@@ -150,10 +158,10 @@ def run(domain, input, fiber, wvl0, n_sample=100, nonlinear=False, dz=1e-06, mod
 
     
     k0 = 2 * torch.pi / wvl0
-    kz = (k0 * fiber.n_clad)**2 - domain.KX**2 - domain.KY**2
+    kz = (k0 * fiber.n_core)**2 - domain.KX**2 - domain.KY**2
     kz = kz.type(torch.complex128)
     KZ = torch.sqrt(kz)
-    Kin = k0 * (fiber.n - fiber.n_clad)
+    Kin = k0 * (fiber.n - fiber.n_core)
     
     n_step = int(fiber.total_z / dz)
     
@@ -168,6 +176,13 @@ def run(domain, input, fiber, wvl0, n_sample=100, nonlinear=False, dz=1e-06, mod
     cnt = 0
     E_real = input.field
     for i in tqdm(range(n_step), desc="Simulating propagation"):
+        
+        if (i % sample_interval == 0) and cnt < n_sample:
+            energy = torch.sum(torch.abs(E_real)**2)
+            energy_arr[cnt] = energy.item()
+            field_arr[cnt] = E_real
+            cnt += 1
+        
         # Index modulation
         if nonlinear:
             Knl = fiber.n2 * k0 * torch.abs(E_real)**2
@@ -188,11 +203,7 @@ def run(domain, input, fiber, wvl0, n_sample=100, nonlinear=False, dz=1e-06, mod
             coefficients = decompose_modes(E_real, modes,)
             modes_arr[i] = np.abs(coefficients)
 
-        if (i % sample_interval == 0) and cnt < n_sample:
-            energy = torch.sum(torch.abs(E_real)**2)
-            energy_arr[cnt] = energy.item()
-            field_arr[cnt] = E_real
-            cnt += 1
+        
 
     if mode_decompose:
         return E_real, modes_arr, field_arr, energy_arr
