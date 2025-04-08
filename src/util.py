@@ -71,7 +71,7 @@ def plot_beam_intensity(field, indices=None, extent=None, interpolation=None):
     fig, ax = plt.subplots()
     
     eps = 1e-5
-    extent = [-75, 75, -75, 75]
+    extent = [-1000, 1000, -1000, 1000]
     xtick = np.linspace(0, field.shape[1]+eps, 5)
     ytick = np.linspace(0, field.shape[0]+eps, 5)
     xlabel = np.linspace(extent[0], extent[1], 5)

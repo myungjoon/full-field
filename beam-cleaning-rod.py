@@ -11,7 +11,7 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
-np.random.seed(45)
+np.random.seed(46)
 
 c = 299792458
 
@@ -27,37 +27,69 @@ Lx, Ly = 2000e-6, 2000e-6
 Nx, Ny = 4096, 4096
 ds_factor = 4
 
-total_z = 0.15
+total_z = 0.01
 dz = 1e-6
 
-intensity = 4.07e13
-total_power = 144e3
+# intensity = 4.07e20
+total_power = 144e4
 # intensity = 4.07e1
-amp = np.sqrt(intensity)
+# amp = np.sqrt(intensity)
 
+input_type = "mode_mixing"
 print(f'The total power is {total_power} W')
+print(f'The input beam is the combination of several modes')
 
-num_samples = 200
+num_samples = 100
+
+num_modes = 6
+target_modes = (0, 2, 4, 5, 7, 8)
+coefficients = np.zeros((num_modes, 2), dtype=complex)
+for i, n in enumerate(target_modes):
+    l, m = n_to_lm(n+1)
+    print(f'The mode {n+1} is LP{l}{m}')
+    if l == 0:
+        coefficients[n,0] = 0.1 * np.exp(1j * np.random.random() * 1.0 * np.pi)
+    else:
+        alpha = np.random.random()
+        coefficients[i,0] = alpha * np.exp(1j * np.random.random() * 1.0 * np.pi)
+        coefficients[i,1] = (1-alpha) * np.exp(1j * np.random.random() * 1.0 * np.pi)
 
 
-cx = 400e-6
-cy = 0
+
+
 domain = Domain(Lx, Ly, Nx, Ny, device=device)
-input_beam = Input(domain, wvl0, n_core, n_clad, type="gaussian", noise=True, beam_radius=50e-6, cx=cx, cy=cy, amp=amp, radius=radius, device=device)
+
+
+if input_type == "mode_mixing":
+    input_beam = Input(domain, wvl0, n_core, n_clad, type=input_type, power=total_power, radius=radius,
+                        num_mode=num_modes, coefficients=coefficients, device=device)
+elif input_type == "gaussian":
+    cx = 300e-6
+    cy = 0
+    noise = True
+    beam_radius = 50e-6
+    input_beam = Input(domain, wvl0, n_core, n_clad, 
+                       type="gaussian", cx=cx, cy=cy, 
+                       power=total_power, noise=noise, beam_radius=beam_radius, radius=radius, device=device)
+else:
+    raise ValueError('Invalid Input Type')
+
 fiber = Fiber(domain, n_core, n_clad, total_z, dz, n2=n2, radius=radius, disorder=False, device=device)
 
-indices = fiber.n.cpu().numpy()
+index_distribution = fiber.n.cpu().numpy()
 input_field = input_beam.field.cpu().numpy()
 
 
-start_time = time.time()
+plot_beam_intensity(input_field, indices=index_distribution, interpolation="bilinear")
+plt.show()
 
-output, fields, energies = run(domain, input_beam, fiber, wvl0, dz=dz, mode_decompose=False, nonlinear=nonlinear)
+start_time = time.time()
+print(f'The simulation starts.')
+output, fields, energies, Knls, Kins  = run(domain, input_beam, fiber, wvl0, dz=dz, mode_decompose=False,)
 print(f'Elapsed time: {time.time() - start_time}')
 
 output = output.cpu().numpy()
 fields = fields[:, ::ds_factor, ::ds_factor]
-energies = energies[:, ::ds_factor, ::ds_factor]
 
 x_window = fields.shape[1] // 4
 y_window = fields.shape[2] // 4
@@ -70,9 +102,13 @@ fiber_index = fiber.n.cpu().numpy()
 np.save('GRIN_rod_indices.npy', fiber_index)
 np.save(f'output_rod_off_power_{total_power}.npy', output)
 np.save(f'fields_rod_off_power_{total_power}.npy', fields)
+np.save(f'energies_rod_off_power_{total_power}.npy', energies)
+np.save(f'Knls_rod_off_power_{total_power}.npy', Knls)
+np.save(f'Kins_rod_off_power_{total_power}.npy', Kins)
 
 plot_index_profile(fiber_index)
-plot_beam_intensity(input_field, indices=indices, interpolation="bilinear")
-plot_beam_intensity(output, indices=indices, interpolation="bilinear")
+plot_beam_intensity(input_field, indices=index_distribution, interpolation="bilinear")
+plot_beam_intensity(output, indices=index_distribution, interpolation="bilinear")
 plot_energy_evolution(energies, dz=dz)
+
 plt.show()

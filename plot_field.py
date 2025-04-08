@@ -18,22 +18,17 @@ data = np.abs(data)**2
 output_intensity = data[-1]
 max_val = np.max(output_intensity)
 
-fiber = np.load('fiber_GRIN.npy')
-# fiber = np.load('rod_GRIN.npy')
-# fiber = fiber[::2, ::2]
+ds_factor = 4
 
-print(f'{data.shape}')
+fiber = np.load('GRIN_rod_indices.npy')
+fiber = fiber[::ds_factor, ::ds_factor]
 
-# Create output directory if it doesn't exist
-if not os.path.exists('frames'):
-    os.makedirs('frames')
+print(f'index distribution shape : {fiber.shape}')
 
 # Find global min and max for consistent colormap scaling
 vmin = np.min(data)*0.8
 vmax = np.max(data)*0.8
 norm = Normalize(vmin=vmin, vmax=vmax)
-
-
 
 # Create individual frames
 for i in range(data.shape[0]):
