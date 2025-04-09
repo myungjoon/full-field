@@ -1,12 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-total_power = 144e4
    
-data = np.load('fields_rod_off_power_1440000.0.npy')
-output = np.load('output_rod_off_power_1440000.0.npy')
-Knls = np.load('Knls_rod_off_power_1440000.0.npy')
-Kins = np.load('Kins_rod_off_power_1440000.0.npy')
+data = np.load('fields_rod_off_power_1600000.0.npy')
+output = np.load('output_rod_off_power_1600000.0.npy')
+Knls = np.load('Knls_rod_off_power_1600000.0.npy')
+Kins = np.load('Kins_rod_off_power_1600000.0.npy')
 
 
 print(data.shape)
@@ -30,7 +29,4 @@ plot_field_intensity(data[-2, :, :], indices=None, interpolation="bilinear")
 plot_field_intensity(data[-3, :, :], indices=None, interpolation="bilinear")
 
 # plt.imshow(np.abs(data[-5, :, :]**2), cmap='turbo', interpolation='bilinear')
-
-
-
 plt.show()

@@ -69,7 +69,7 @@ class Mode:
         self.l = l
         self.m = m
 
-        self.field = self.calculate_field()
+        # self.field = self.calculate_field()
        
     def calculate_field(self):       
         grid = grids.Grid(pixel_size=self.Lx/self.Nx, pixel_numbers=(self.Nx, self.Ny))
@@ -107,7 +107,7 @@ def decompose_modes(field, modes, num_modes=10, dtype='real'):
         
         if l == 0:
             overlap_0 = torch.sum(modes[n][:, :, 0] * field.conj())
-            overlap_1 = 0.
+            overlap_1 = torch.tensor(0.)
         else:
             overlap_0 = torch.sum(modes[n][:, :, 0] * field.conj())
             overlap_1 = torch.sum(modes[n][:, :, 1] * field.conj())

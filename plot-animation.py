@@ -25,24 +25,24 @@ fiber = fiber[::ds_factor, ::ds_factor]
 
 print(f'index distribution shape : {fiber.shape}')
 
-# Create individual frames
+# Create individual 
 for i in range(field.shape[0]):
 
-    vmin = np.min(field[i])*0.8
-    vmax = np.max(field[i])*0.8
+    vmin = np.min(field[i])
+    vmax = np.max(field[i])
     norm = Normalize(vmin=vmin, vmax=vmax)
-
 
     fig, ax = plt.subplots(figsize=(6, 6))
     im = ax.imshow(field[i], cmap='turbo', norm=norm, origin='lower',)
     
-    x_tick_positions = [0, 127.5, 255.5]
-    x_tick_labels = [-75, 0, 75]
+
+    x_tick_positions = [0, 255 , 511]
+    x_tick_labels = [-1000, 0, 1000]
     plt.xticks(ticks=x_tick_positions, labels=x_tick_labels)
     plt.xlabel(r'x ($\mu m$)')
 
-    y_tick_positions = [0, 127.5, 255.5]
-    y_tick_labels = [-75, 0, 75]
+    # y_tick_positions = [0, 127.5, 255.5]
+    x_tick_labels = [-1000, 0, 1000]
     plt.yticks(ticks=y_tick_positions, labels=y_tick_labels)
     plt.ylabel(r'y ($\mu m$)')
 

@@ -90,7 +90,7 @@ class Input:
         elif type=="mode":
             self.field, self.beta = self.LP_modes(l, m)
         elif type=="mode_mixing":
-            self.field = self.mode_mixing(num_mode, coefficients)            
+            self.field = self.mode_mixing(num_mode, coefficients, cx=cx, cy=cy,)      
         else:
             raise ValueError('Invalid Type')
 
@@ -98,9 +98,12 @@ class Input:
         R = torch.sqrt((self.domain.X-cx)**2 + (self.domain.Y-cy)**2)
         field = torch.exp(-R**2 / w**2)
         
-        field = normalize_field_to_power(field, self.domain.X, self.domain.Y, self.power)
         if noise:
-            field = field * torch.exp(1j * 0.2 * np.pi * torch.rand_like(field))
+            field = field * torch.exp(1j * 1.0 * np.pi * torch.rand_like(field))
+
+        dx = self.domain.Lx / self.domain.Nx
+        dy = self.domain.Ly / self.domain.Ny
+        field = normalize_field_to_power(field.to(self.device), dx, dy, self.power)
         return field.to(self.device)
 
     def LP_modes(self, l, m,):
@@ -119,7 +122,7 @@ class Input:
 
         return field.to(self.device), beta
 
-    def mode_mixing(self, num_mode, coefficients=None,):
+    def mode_mixing(self, num_mode, coefficients=None, cx=0, cy=0,):
         grid = grids.Grid(pixel_size=self.domain.Lx/self.domain.Nx, pixel_numbers=(self.domain.Nx, self.domain.Ny))
         grin_fiber = GrinFiber(radius=self.radius, wavelength=self.wvl0, n1=self.n_core, n2=self.n_clad)
         
@@ -138,11 +141,15 @@ class Input:
                 field = torch.tensor(mode._fields)
                 field = field[:, :, 0] * coefficients[n, 0] + field[:, :, 1] * coefficients[n,1]
                 total_field += field
-            
-        total_field = normalize_field_to_power(total_field.to(self.device), self.domain.X, self.domain.Y, self.power)
-        return total_field
+        
+        dx = self.domain.Lx / self.domain.Nx
+        dy = self.domain.Ly / self.domain.Ny
+        total_field = normalize_field_to_power(total_field.to(self.device), dx, dy, self.power)
+        # move total field with cx and cy
+        total_field = torch.roll(total_field, shifts=(int(cx/dx), int(cy/dy)), dims=(0, 1))
+        return total_field.to(self.device)
 
-def normalize_field_to_power(E_field, dX, dY, P_target):
+def normalize_field_to_power(E_field, dx, dy, P_target):
     """
     Normalize the input field to have total power = P_target.
 
@@ -154,8 +161,9 @@ def normalize_field_to_power(E_field, dX, dY, P_target):
     Returns:
         E_normalized : np.ndarray (complex) - normalized field
     """
+    dA = dx * dy
     intensity = torch.abs(E_field)**2
-    P_current = torch.sum(intensity) * dX * dY
+    P_current = torch.sum(intensity) * dA
     scale = torch.sqrt(P_target / P_current)
     return E_field * scale
 
@@ -185,7 +193,7 @@ def run(domain, input, fiber, wvl0, n_sample=100, dz=1e-06, mode_decompose=False
 
     if mode_decompose:
         modes = calculate_modes(domain, fiber, input, num_modes=num_modes, device=device)
-        modes_arr = np.zeros((n_step, num_modes), dtype=float)
+        modes_arr = np.zeros((n_step, num_modes, 2), dtype=float)
 
     Knl_arr = np.zeros(n_sample, dtype=float)
     Kin_arr = np.zeros(n_sample, dtype=float)
@@ -217,8 +225,6 @@ def run(domain, input, fiber, wvl0, n_sample=100, dz=1e-06, mode_decompose=False
         if mode_decompose:
             coefficients = decompose_modes(E_real, modes,)
             modes_arr[i] = np.abs(coefficients)
-
-        
 
     if mode_decompose:
         return E_real, modes_arr, field_arr, energy_arr, Knl_arr, Kin_arr

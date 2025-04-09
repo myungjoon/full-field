@@ -27,19 +27,19 @@ Lx, Ly = 2000e-6, 2000e-6
 Nx, Ny = 4096, 4096
 ds_factor = 4
 
-total_z = 0.01
-dz = 1e-6
+total_z = 0.5
+dz = 5e-6
 
-# intensity = 4.07e20
-total_power = 144e4
-# intensity = 4.07e1
-# amp = np.sqrt(intensity)
-
+total_power = 1.6e7
 input_type = "mode_mixing"
+position = "on"
+
+mode_decompose = True
+
 print(f'The total power is {total_power} W')
 print(f'The input beam is the combination of several modes')
 
-num_samples = 100
+num_samples = 500
 
 num_modes = 6
 target_modes = (0, 2, 4, 5, 7, 8)
@@ -55,17 +55,21 @@ for i, n in enumerate(target_modes):
         coefficients[i,1] = (1-alpha) * np.exp(1j * np.random.random() * 1.0 * np.pi)
 
 
-
-
 domain = Domain(Lx, Ly, Nx, Ny, device=device)
 
 
-if input_type == "mode_mixing":
-    input_beam = Input(domain, wvl0, n_core, n_clad, type=input_type, power=total_power, radius=radius,
-                        num_mode=num_modes, coefficients=coefficients, device=device)
-elif input_type == "gaussian":
+if position == "off":
     cx = 300e-6
     cy = 0
+else:
+    cx = 0
+    cy = 0
+
+if input_type == "mode_mixing":
+    input_beam = Input(domain, wvl0, n_core, n_clad, type=input_type, power=total_power, 
+                       radius=radius, num_mode=num_modes, cx=cx, cy=cy, coefficients=coefficients, device=device)
+elif input_type == "gaussian":
+
     noise = True
     beam_radius = 50e-6
     input_beam = Input(domain, wvl0, n_core, n_clad, 
@@ -85,7 +89,10 @@ plt.show()
 
 start_time = time.time()
 print(f'The simulation starts.')
-output, fields, energies, Knls, Kins  = run(domain, input_beam, fiber, wvl0, dz=dz, mode_decompose=False,)
+if mode_decompose:
+    output, modes, fields, energies, Knls, Kins  = run(domain, input_beam, fiber, wvl0, dz=dz, mode_decompose=mode_decompose,)
+else:
+    output, fields, energies, Knls, Kins  = run(domain, input_beam, fiber, wvl0, dz=dz, mode_decompose=mode_decompose,)
 print(f'Elapsed time: {time.time() - start_time}')
 
 output = output.cpu().numpy()
@@ -100,11 +107,11 @@ fields = fields.cpu().numpy()
 fiber_index = fiber.n.cpu().numpy()
 
 np.save('GRIN_rod_indices.npy', fiber_index)
-np.save(f'output_rod_off_power_{total_power}.npy', output)
-np.save(f'fields_rod_off_power_{total_power}.npy', fields)
-np.save(f'energies_rod_off_power_{total_power}.npy', energies)
-np.save(f'Knls_rod_off_power_{total_power}.npy', Knls)
-np.save(f'Kins_rod_off_power_{total_power}.npy', Kins)
+np.save(f'output_rod_{input_type}_{position}_{int(total_power)}.npy', output)
+np.save(f'fields_rod_{input_type}_{position}_{int(total_power)}.npy', fields)
+np.save(f'energies_rod_{input_type}_{position}_{int(total_power)}.npy', energies)
+np.save(f'Knls_rod_{input_type}_{position}_{int(total_power)}.npy', Knls)
+np.save(f'Kins_rod_{input_type}_{position}_{int(total_power)}.npy', Kins)
 
 plot_index_profile(fiber_index)
 plot_beam_intensity(input_field, indices=index_distribution, interpolation="bilinear")
