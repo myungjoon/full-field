@@ -27,8 +27,8 @@ Lx, Ly = 2000e-6, 2000e-6
 Nx, Ny = 4096, 4096
 ds_factor = 4
 
-total_z = 0.5
-dz = 5e-6
+total_z = 0.15
+dz = 1e-6
 
 total_power = 1.6e7
 input_type = "mode_mixing"
@@ -83,19 +83,15 @@ fiber = Fiber(domain, n_core, n_clad, total_z, dz, n2=n2, radius=radius, disorde
 index_distribution = fiber.n.cpu().numpy()
 input_field = input_beam.field.cpu().numpy()
 
-
-plot_beam_intensity(input_field, indices=index_distribution, interpolation="bilinear")
-plt.show()
-
 start_time = time.time()
 print(f'The simulation starts.')
 if mode_decompose:
-    output, modes, fields, energies, Knls, Kins  = run(domain, input_beam, fiber, wvl0, dz=dz, mode_decompose=mode_decompose,)
+    output_field, modes, fields, energies, Knls, Kins  = run(domain, input_beam, fiber, wvl0, dz=dz, mode_decompose=mode_decompose,)
 else:
-    output, fields, energies, Knls, Kins  = run(domain, input_beam, fiber, wvl0, dz=dz, mode_decompose=mode_decompose,)
+    output_field, fields, energies, Knls, Kins  = run(domain, input_beam, fiber, wvl0, dz=dz, mode_decompose=mode_decompose,)
 print(f'Elapsed time: {time.time() - start_time}')
 
-output = output.cpu().numpy()
+output_field = output_field.cpu().numpy()
 fields = fields[:, ::ds_factor, ::ds_factor]
 
 x_window = fields.shape[1] // 4
@@ -105,17 +101,29 @@ fields = fields[:, (fields.shape[1]//2 - x_window):(fields.shape[1]//2 + x_windo
 fields = fields[:, (fields.shape[1]//2 - x_window):(fields.shape[1]//2 + x_window), (fields.shape[2]//2 - y_window):(fields.shape[2]//2 + y_window)]
 fields = fields.cpu().numpy()
 fiber_index = fiber.n.cpu().numpy()
+# modes = modes.cpu().numpy()
+energies = energies.cpu().numpy()
+
 
 np.save('GRIN_rod_indices.npy', fiber_index)
-np.save(f'output_rod_{input_type}_{position}_{int(total_power)}.npy', output)
+np.save(f'input_rod_{input_type}_{position}_{int(total_power)}.npy', input_field)
+np.save(f'output_rod_{input_type}_{position}_{int(total_power)}.npy', output_field)
 np.save(f'fields_rod_{input_type}_{position}_{int(total_power)}.npy', fields)
 np.save(f'energies_rod_{input_type}_{position}_{int(total_power)}.npy', energies)
+np.save(f'modes_rod_{input_type}_{position}_{int(total_power)}.npy', modes)
 np.save(f'Knls_rod_{input_type}_{position}_{int(total_power)}.npy', Knls)
 np.save(f'Kins_rod_{input_type}_{position}_{int(total_power)}.npy', Kins)
 
-plot_index_profile(fiber_index)
-plot_beam_intensity(input_field, indices=index_distribution, interpolation="bilinear")
-plot_beam_intensity(output, indices=index_distribution, interpolation="bilinear")
-plot_energy_evolution(energies, dz=dz)
+# plot_index_profile(fiber_index)
+
+# plot_beam_input_and_output(input_field, output_field, indices=index_distribution, interpolation="bilinear")
+# plot_input_and_output_modes(input_field, indices=index_distribution, interpolation="bilinear")
+# make_3d_animation(fields, fiber_index, indices=index_distribution, interpolation="bilinear", filename=f'animation_rod_{input_type}_{position}_{int(total_power)}.mp4')
+# plot_3d_profile(fields, fiber_index, indices=index_distribution, interpolation="bilinear", filename=f'3d_profile_rod_{input_type}_{position}_{int(total_power)}.png')
+# plot_energy_evolution(energies, dz=dz)
+# plot_mode_evolution(modes, dz=dz)
+# plot_beam_intensity(input_field, indices=index_distribution, interpolation="bilinear")
+# plot_beam_intensity(output, indices=index_distribution, interpolation="bilinear")
+
 
 plt.show()
