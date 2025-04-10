@@ -28,9 +28,9 @@ Nx, Ny = 4096, 4096
 ds_factor = 4
 
 total_z = 0.15
-dz = 1e-6
+dz = 5e-6
 
-total_power = 1.6e7
+total_power = 1.6e3
 input_type = "mode_mixing"
 position = "on"
 
