@@ -57,12 +57,12 @@ def n_to_lm(n):
         count += group_size
         group_sum += 1
 
-def plot_mode_evolution(modes, dz):
+def plot_mode_evolution(modes, dz, num_modes=10):
     plt.figure()
     z = np.arange(0, len(modes)*dz, dz)
-    for i in range(modes.shape[1]):
+    for i in range(num_modes):
         l, m = n_to_lm(i+1)
-        plt.plot(z, modes[:, i], label=f'LP{l}{m}')
+        plt.plot(z, np.sum(np.abs(modes[:, i])**2, axis=1), label=f'LP{l}{m}')
     plt.xlabel('z (m)')
     plt.ylabel('Amplitude')
 
@@ -79,7 +79,7 @@ def plot_beam_intensity(field, indices=None, extent=None, interpolation=None):
     fig, ax = plt.subplots()
     
     eps = 1e-5
-    extent = [-75, 75, -75, 75]
+    extent = [-1000, 1000, -1000, 1000]
     xtick = np.linspace(0, field.shape[1]+eps, 5)
     ytick = np.linspace(0, field.shape[0]+eps, 5)
     xlabel = np.linspace(extent[0], extent[1], 5)
@@ -224,14 +224,17 @@ def plot_input_and_output_modes(input_modes, output_modes, num_l=5, num_m=5):
 def plot_input_and_output_beam(input_field, output_field, indices=None, interpolation=None):
     fig, ax = plt.subplots(1, 2, figsize=(10, 5))
     
+
+    
+
     #plot input_field and output_field
-    ax[0].imshow(np.abs(input_field)**2, cmap='turbo', interpolation=interpolation)
+    ax[0].imshow(np.abs(input_field)**2, cmap='turbo', interpolation=interpolation, extent=extent)
     ax[0].set_title('Input Field')
     if indices is not None:
         ax[0].contour(indices, levels=[np.min(indices)], colors='white', linewidths=2)
 
 
-    ax[1].imshow(np.abs(output_field)**2, cmap='turbo', interpolation=interpolation)
+    ax[1].imshow(np.abs(output_field)**2, cmap='turbo', interpolation=interpolation, extent=extent)
     ax[1].set_title('Output Field')
     if indices is not None:
         ax[1].contour(indices, levels=[np.min(indices)], colors='white', linewidths=2)
@@ -313,7 +316,7 @@ def plot_3d_profile(fields):
     z_indices = all_z_indices
 
     # Define fiber parameters
-    R = min(nx, ny) * 0.15  # Core radius (adjust as needed)
+    R = min(nx, ny) * 0.45  # Core radius (adjust as needed)
     core_center_x = nx // 2
     core_center_y = ny // 2
 
