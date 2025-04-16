@@ -1,9 +1,8 @@
 import numpy as np
 import torch
-import mmfsim.grid as grids
-from mmfsim.coupling import GrinFiberCoupler
-from mmfsim.fiber import GrinFiber
-from mmfsim.modes import GrinLPMode
+from .mmfsim import grid as grids
+from .mmfsim.fiber import GrinFiber
+from .mmfsim.modes import GrinLPMode
 from .modes import calculate_modes, decompose_modes, n_to_lm
 
 from tqdm import tqdm

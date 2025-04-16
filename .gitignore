@@ -171,4 +171,5 @@ cython_debug/
 .pypirc
 
 *.npy
-
+*.mp4
+*.png

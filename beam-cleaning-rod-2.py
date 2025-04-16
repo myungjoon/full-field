@@ -27,12 +27,12 @@ Lx, Ly = 2000e-6, 2000e-6
 Nx, Ny = 4096, 4096
 ds_factor = 4
 
-total_z = 0.15
-dz = 5e-6
+total_z = 0.50
+dz = 1e-5
 
-total_power = 1.6e3
+total_power = 6.0e6
 input_type = "mode_mixing"
-position = "on"
+position = "off"
 
 mode_decompose = True
 
@@ -53,6 +53,14 @@ for i, n in enumerate(target_modes):
         alpha = np.random.random()
         coefficients[i,0] = alpha * np.exp(1j * np.random.random() * 1.0 * np.pi)
         coefficients[i,1] = (1-alpha) * np.exp(1j * np.random.random() * 1.0 * np.pi)
+
+num_l = 5
+num_m = 5
+num_total_modes = num_l * num_m
+input_mode = np.zeros((num_l, num_m), dtype=float)
+for i, mode in enumerate(target_modes):
+    l, m = n_to_lm(mode+1)
+    input_mode[l, m] = coefficients[i, 0].real
 
 
 domain = Domain(Lx, Ly, Nx, Ny, device=device)

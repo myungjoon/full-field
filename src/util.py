@@ -258,8 +258,6 @@ def plot_input_and_output_beam(input_field, output_field, radius=10, extent=None
 def make_3d_animation(fields, indices=None, filename=None, extent=None, radius=10, interpolation=None):
     intensities = np.abs(fields)**2
 
-    x_size, y_size = intensities.shape[1], intensities.shape[2]
-
     if not os.path.exists('frames'):
         os.makedirs('frames')
 
@@ -284,14 +282,11 @@ def make_3d_animation(fields, indices=None, filename=None, extent=None, radius=1
         plt.savefig(f'frames/frame_{i:03d}.png')
         plt.close()
 
-    # Create MP4 using imageio
     fps = 10  # Frames per second
     with imageio.get_writer(filename + '.mp4', fps=fps) as writer:
         for i in range(num_frames):
             image = imageio.imread(f'frames/frame_{i:03d}.png')
             writer.append_data(image)
-
-
 
 def plot_3d_profile(fields):
     intensities = np.abs(fields)**2

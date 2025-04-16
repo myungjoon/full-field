@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+
 from src.util import make_3d_animation, plot_3d_profile, plot_input_and_output_beam
 import os
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -37,7 +38,6 @@ fiber_index_ds = fiber_index[::ds_factor, ::ds_factor]
 x_window = fiber_index_ds.shape[0] // 4
 y_window = fiber_index_ds.shape[1] // 4
 fiber_index_ds = fiber_index_ds[(fiber_index_ds.shape[0]//2 - x_window):(fiber_index_ds.shape[0]//2 + x_window), (fiber_index_ds.shape[1]//2 - y_window):(fiber_index_ds.shape[1]//2 + y_window)]
-
 
 animation_filename = f'{waveguide_type}_{input_type}_{position}_{int(total_power)}'
 # plot_input_and_output_beam(input_field, output_field, radius=radius, indices=fiber_index, extent=extent, interpolation="bilinear")
