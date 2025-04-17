@@ -8,10 +8,9 @@ from src.simulation import Domain, Fiber, Input, run
 from src.modes import calculate_modes, decompose_modes, n_to_lm
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
-device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-seed = 41
-
+seed = 2
 np.random.seed(seed)
 
 c = 299792458
@@ -30,9 +29,9 @@ ds_factor = 1
 total_z = 2.0
 dz = 1e-5
 
-total_power = 6.3e3
+total_power = 6.3e2
 input_type = "mode_mixing"
-position = "on"
+position = "off"
 waveguide_type = "fiber"
 
 mode_decompose = True
@@ -60,8 +59,8 @@ domain = Domain(Lx, Ly, Nx, Ny, device=device)
 
 
 if position == "off":
-    cx = 300e-6
-    cy = 0
+    cy = radius/2 
+    cx = 0
 else:
     cx = 0
     cy = 0
@@ -108,13 +107,13 @@ fields = fields.cpu().numpy()
 fiber_index = fiber.n.cpu().numpy()
 
 np.save(f'GRIN_{waveguide_type}_indices.npy', fiber_index)
-np.save(f'modes_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}.npy', modes)
-np.save(f'input_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}.npy', input_field)
-np.save(f'output_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}.npy', output)
-np.save(f'fields_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}.npy', fields)
-np.save(f'energies_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}.npy', energies)
-np.save(f'Knls_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}.npy', Knls)
-np.save(f'Kins_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}.npy', Kins)
+np.save(f'modes_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', modes)
+np.save(f'input_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', input_field)
+np.save(f'output_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', output)
+np.save(f'fields_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', fields)
+np.save(f'energies_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', energies)
+np.save(f'Knls_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', Knls)
+np.save(f'Kins_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', Kins)
 
 plot_index_profile(fiber_index)
 plot_beam_intensity(input_field, indices=index_distribution, interpolation="bilinear")

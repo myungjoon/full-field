@@ -362,3 +362,17 @@ def plot_3d_profile(fields):
 
     # Display the plot
     plt.tight_layout()
+
+
+def correlation(field1, field2, dx=1e-6):
+    """
+    Calculate the correlation between two fields.
+    """
+    field1 = np.fft.fftshift(np.fft.fft2(field1))
+    field2 = np.fft.fftshift(np.fft.fft2(field2))
+
+    field1 = np.abs(field1)**2
+    field2 = np.abs(field2)**2
+
+    correlation = np.sum(field1 * field2) * dx**2
+    return correlation

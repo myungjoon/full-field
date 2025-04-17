@@ -11,7 +11,8 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
-np.random.seed(46)
+seed = 2
+np.random.seed(seed)
 
 c = 299792458
 
@@ -23,16 +24,17 @@ n2 = 2.3e-20
 wvl0 = 775e-9
 
 radius = 450e-6
-Lx, Ly = 2000e-6, 2000e-6
+Lx, Ly = 1800e-6, 1800e-6
 Nx, Ny = 4096, 4096
 ds_factor = 4
 
 total_z = 0.15
-dz = 5e-6
+dz = 1e-5
 
 total_power = 1.6e3
 input_type = "mode_mixing"
-position = "on"
+position = "off"
+waveguide_type = "rod"
 
 mode_decompose = True
 
@@ -41,14 +43,14 @@ print(f'The input beam is the combination of several modes')
 
 num_samples = 500
 
-num_modes = 6
-target_modes = (0, 2, 4, 5, 7, 8)
+num_modes = 10
+target_modes = (0, 2, 4, 5, 7, 8, 9, 10, 11, 12)
 coefficients = np.zeros((num_modes, 2), dtype=complex)
 for i, n in enumerate(target_modes):
     l, m = n_to_lm(n+1)
     print(f'The mode {n+1} is LP{l}{m}')
     if l == 0:
-        coefficients[n,0] = 0.1 * np.exp(1j * np.random.random() * 1.0 * np.pi)
+        coefficients[i,0] = 0.1 * np.exp(1j * np.random.random() * 1.0 * np.pi)
     else:
         alpha = np.random.random()
         coefficients[i,0] = alpha * np.exp(1j * np.random.random() * 1.0 * np.pi)
@@ -59,8 +61,8 @@ domain = Domain(Lx, Ly, Nx, Ny, device=device)
 
 
 if position == "off":
-    cx = 300e-6
-    cy = 0
+    cy = 300e-6
+    cx = 0
 else:
     cx = 0
     cy = 0
@@ -83,15 +85,20 @@ fiber = Fiber(domain, n_core, n_clad, total_z, dz, n2=n2, radius=radius, disorde
 index_distribution = fiber.n.cpu().numpy()
 input_field = input_beam.field.cpu().numpy()
 
+
+# plot_beam_intensity(input_field, indices=index_distribution, interpolation="bilinear")
+# plt.show()
+
+
 start_time = time.time()
 print(f'The simulation starts.')
 if mode_decompose:
-    output_field, modes, fields, energies, Knls, Kins  = run(domain, input_beam, fiber, wvl0, dz=dz, mode_decompose=mode_decompose,)
+    output, modes, fields, energies, Knls, Kins  = run(domain, input_beam, fiber, wvl0, dz=dz, mode_decompose=mode_decompose,)
 else:
-    output_field, fields, energies, Knls, Kins  = run(domain, input_beam, fiber, wvl0, dz=dz, mode_decompose=mode_decompose,)
+    output, fields, energies, Knls, Kins  = run(domain, input_beam, fiber, wvl0, dz=dz, mode_decompose=mode_decompose,)
 print(f'Elapsed time: {time.time() - start_time}')
 
-output_field = output_field.cpu().numpy()
+output = output.cpu().numpy()
 fields = fields[:, ::ds_factor, ::ds_factor]
 
 x_window = fields.shape[1] // 4
@@ -101,29 +108,19 @@ fields = fields[:, (fields.shape[1]//2 - x_window):(fields.shape[1]//2 + x_windo
 fields = fields[:, (fields.shape[1]//2 - x_window):(fields.shape[1]//2 + x_window), (fields.shape[2]//2 - y_window):(fields.shape[2]//2 + y_window)]
 fields = fields.cpu().numpy()
 fiber_index = fiber.n.cpu().numpy()
-# modes = modes.cpu().numpy()
-energies = energies.cpu().numpy()
 
+np.save(f'GRIN_{waveguide_type}_indices.npy', fiber_index)
+np.save(f'modes_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', modes)
+np.save(f'input_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', input_field)
+np.save(f'output_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', output)
+np.save(f'fields_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', fields)
+np.save(f'energies_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', energies)
+np.save(f'Knls_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', Knls)
+np.save(f'Kins_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', Kins)
 
-np.save('GRIN_rod_indices.npy', fiber_index)
-np.save(f'input_rod_{input_type}_{position}_{int(total_power)}.npy', input_field)
-np.save(f'output_rod_{input_type}_{position}_{int(total_power)}.npy', output_field)
-np.save(f'fields_rod_{input_type}_{position}_{int(total_power)}.npy', fields)
-np.save(f'energies_rod_{input_type}_{position}_{int(total_power)}.npy', energies)
-np.save(f'modes_rod_{input_type}_{position}_{int(total_power)}.npy', modes)
-np.save(f'Knls_rod_{input_type}_{position}_{int(total_power)}.npy', Knls)
-np.save(f'Kins_rod_{input_type}_{position}_{int(total_power)}.npy', Kins)
-
-# plot_index_profile(fiber_index)
-
-# plot_beam_input_and_output(input_field, output_field, indices=index_distribution, interpolation="bilinear")
-# plot_input_and_output_modes(input_field, indices=index_distribution, interpolation="bilinear")
-# make_3d_animation(fields, fiber_index, indices=index_distribution, interpolation="bilinear", filename=f'animation_rod_{input_type}_{position}_{int(total_power)}.mp4')
-# plot_3d_profile(fields, fiber_index, indices=index_distribution, interpolation="bilinear", filename=f'3d_profile_rod_{input_type}_{position}_{int(total_power)}.png')
-# plot_energy_evolution(energies, dz=dz)
-# plot_mode_evolution(modes, dz=dz)
-# plot_beam_intensity(input_field, indices=index_distribution, interpolation="bilinear")
-# plot_beam_intensity(output, indices=index_distribution, interpolation="bilinear")
-
+plot_index_profile(fiber_index)
+plot_beam_intensity(input_field, indices=index_distribution, interpolation="bilinear")
+plot_beam_intensity(output, indices=index_distribution, interpolation="bilinear")
+plot_energy_evolution(energies, dz=dz)
 
 plt.show()

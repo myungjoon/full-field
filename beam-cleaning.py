@@ -8,8 +8,7 @@ from src.simulation import Domain, Fiber, Input, run
 from src.modes import calculate_modes, decompose_modes, n_to_lm
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
-device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
-# np.random.seed(44)
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 np.random.seed(105)
 
 c = 299792458
@@ -25,11 +24,11 @@ radius = 26e-6
 Lx, Ly = 150e-6, 150e-6
 Nx, Ny = 256, 256
 total_z = 1.0
-dz = 1e-6
+dz = 1e-5
 
 n2 = 2.3e-20
-# intensity = 5e13
-intensity = 5e14
+intensity = 5e13
+# intensity = 5e14
 amp = np.sqrt(intensity)
 
 num_samples = 500
@@ -83,7 +82,7 @@ else:
     print(f'Running Linear simulation')
 start_time = time.time()
 
-output, modes, fields, energies = run(domain, input_beam, fiber, wvl0, dz=dz, mode_decompose=True, nonlinear=nonlinear)
+output, modes, fields, energies, _, _ = run(domain, input_beam, fiber, wvl0, dz=dz, mode_decompose=True, nonlinear=nonlinear)
 print(f'Elapsed time: {time.time() - start_time}')
 
 output = output.cpu().numpy()
