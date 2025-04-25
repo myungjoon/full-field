@@ -79,7 +79,7 @@ def plot_beam_intensity(field, indices=None, extent=None, interpolation=None):
     fig, ax = plt.subplots()
     
     eps = 1e-5
-    extent = [-1000, 1000, -1000, 1000]
+    extent = [-150/2, 150/2, -150/2, 150/2]
     xtick = np.linspace(0, field.shape[1]+eps, 5)
     ytick = np.linspace(0, field.shape[0]+eps, 5)
     xlabel = np.linspace(extent[0], extent[1], 5)
@@ -227,12 +227,12 @@ def plot_input_and_output_beam(input_field, output_field, radius=10, extent=None
     ax[0].imshow(np.abs(input_field)**2, cmap='turbo', interpolation=interpolation, extent=extent)
     ax[0].set_title('Input Field')
 
-    ax[0].set_xlim([-30, 30])
-    ax[0].set_ylim([-30, 30])
-    ax[0].set_xticks([-30, 0, 30])
-    ax[0].set_yticks([-30, 0, 30])
-    ax[0].set_xticklabels([-30, 0, 30])
-    ax[0].set_yticklabels([-30, 0, 30])
+    ax[0].set_xlim([-75, 75])
+    ax[0].set_ylim([-75, 75])
+    ax[0].set_xticks([-75, 0, 75])
+    ax[0].set_yticks([-75, 0, 75])
+    ax[0].set_xticklabels([-75, 0, 75])
+    ax[0].set_yticklabels([-75, 0, 75])
     ax[0].set_xlabel(r'x ($\mu m$)')
     ax[0].set_ylabel(r'y ($\mu m$)')
     
@@ -244,12 +244,12 @@ def plot_input_and_output_beam(input_field, output_field, radius=10, extent=None
     fiber1 = Circle((0, 0), radius, fill=False, linestyle='--', edgecolor='white', linewidth=2.0)
     ax[1].add_patch(fiber1)
 
-    ax[1].set_xlim([-30, 30])
-    ax[1].set_ylim([-30, 30])
-    ax[1].set_xticks([-30, 0, 30])
-    ax[1].set_yticks([-30, 0, 30])
-    ax[1].set_xticklabels([-30, 0, 30])
-    ax[1].set_yticklabels([-30, 0, 30])
+    ax[1].set_xlim([-75, 75])
+    ax[1].set_ylim([-75, 75])
+    ax[1].set_xticks([-75, 0, 75])
+    ax[1].set_yticks([-75, 0, 75])
+    ax[1].set_xticklabels([-75, 0, 75])
+    ax[1].set_yticklabels([-75, 0, 75])
     ax[1].set_xlabel(r'x ($\mu m$)')
     ax[1].set_ylabel(r'y ($\mu m$)')
 
@@ -270,8 +270,8 @@ def make_3d_animation(fields, indices=None, filename=None, extent=None, radius=1
 
         fig, ax = plt.subplots(figsize=(6, 6))
         im = ax.imshow(intensities[i], cmap='turbo', norm=norm, origin='lower', extent=extent, interpolation=interpolation)
-        ax.set_xlim([-30, 30])
-        ax.set_ylim([-30, 30])
+        # ax.set_xlim([-750, 750])
+        # ax.set_ylim([-750, 750])
         plt.xlabel(r'x ($\mu m$)')
         plt.ylabel(r'y ($\mu m$)')
 
@@ -364,15 +364,17 @@ def plot_3d_profile(fields):
     plt.tight_layout()
 
 
-def correlation(field1, field2, dx=1e-6):
+def correlation(simulation, reference, dx=1e-6):
     """
     Calculate the correlation between two fields.
     """
-    field1 = np.fft.fftshift(np.fft.fft2(field1))
-    field2 = np.fft.fftshift(np.fft.fft2(field2))
 
-    field1 = np.abs(field1)**2
-    field2 = np.abs(field2)**2
+    reference = np.abs(reference)**2
+    simulation = np.abs(simulation)**2
 
-    correlation = np.sum(field1 * field2) * dx**2
-    return correlation
+    reference = (reference - np.mean(reference)) / np.std(reference)
+    simulation = (simulation - np.mean(simulation)) / np.std(simulation)
+
+    corr, p_value = stats.pearsonr(reference.flatten(), simulation.flatten())
+    print(f"Pearson Correlation: {corr:.4f}, p-value: {p_value:.4e}")
+    return corr, p_value

@@ -30,7 +30,7 @@ total_z = 2.0
 dz = 1e-5
 
 total_power = 6.3e2
-input_type = "mode_mixing"
+input_type = "mode"
 position = "off"
 waveguide_type = "fiber"
 
@@ -75,6 +75,11 @@ elif input_type == "gaussian":
     input_beam = Input(domain, wvl0, n_core, n_clad, 
                        type="gaussian", cx=cx, cy=cy, 
                        power=total_power, noise=noise, beam_radius=beam_radius, radius=radius, device=device)
+    
+elif input_type == "mode":
+    l = 0
+    m = 1
+    input_beam = Input(domain, wvl0, n_core, n_clad, type="mode", power=total_power, radius=radius, l=l, m=m, device=device)
 else:
     raise ValueError('Invalid Input Type')
 

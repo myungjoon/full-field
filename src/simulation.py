@@ -111,13 +111,13 @@ class Input:
         mode = GrinLPMode(l, m)
         mode.compute(grin_fiber, grid)
         field = torch.tensor(mode._fields[:, :, 0])
-        
+        field = field.to(self.device)
         # Calculate the propagation constant for the mode
         k0 = 2 * np.pi / self.wvl0
         Delta = (self.n_core - self.n_clad) / self.n_core
         beta = self.n_core * k0 * np.sqrt(1 - 2 * (2*m + l - 1) * np.sqrt(2*Delta) / self.n_core / k0 / self.radius)
 
-        field = normalize_field_to_power(field, self.domain.X, self.domain.Y, self.power)
+        # field = normalize_field_to_power(field, self.domain.X, self.domain.Y, self.power)
 
         return field.to(self.device), beta
 
@@ -167,7 +167,6 @@ def normalize_field_to_power(E_field, dx, dy, P_target):
     return E_field * scale
 
 
-            
 def run(domain, input, fiber, wvl0, n_sample=100, dz=1e-06, mode_decompose=False, num_modes=10):
     
     # device check
@@ -190,6 +189,11 @@ def run(domain, input, fiber, wvl0, n_sample=100, dz=1e-06, mode_decompose=False
     energy_arr = torch.zeros(n_sample)
     field_arr = torch.zeros((n_sample, domain.Nx, domain.Ny), dtype=torch.complex128)
 
+    X = domain.X = domain.X.to(device)
+    Y = domain.Y = domain.Y.to(device)
+
+    absorption = torch.exp(-2*((torch.sqrt(X**2+Y**2)/(fiber.radius*1.5))**10))
+    absorption = absorption.to(device)
     if mode_decompose:
         modes = calculate_modes(domain, fiber, input, num_modes=num_modes, device=device)
         modes_arr = np.zeros((n_step, num_modes, 2), dtype=float)
@@ -220,6 +224,7 @@ def run(domain, input, fiber, wvl0, n_sample=100, dz=1e-06, mode_decompose=False
         E_fft = torch.fft.fft2(E_real)
         E_fft = E_fft * torch.exp(1j  * KZ * dz/2)
         E_real = torch.fft.ifft2(E_fft)
+        E_real = E_real * absorption
 
         if mode_decompose:
             coefficients = decompose_modes(E_real, modes,)

@@ -1,71 +1,48 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+from src.util import make_3d_animation
 import os
-import imageio
-from matplotlib.colors import Normalize
-
-plt.rcParams['font.size'] = 14
-
-# change to current file directory
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-filename = 'fields_rod_gaussian_on_16000'
 
-field = np.load(f'{filename}.npy')
-field = np.abs(field)**2
+num_samples = 100
 
-output_intensity = field[-1]
-max_val = np.max(output_intensity)
+total_length = 0.10
+dz=total_length / num_samples
 
-ds_factor = 4
+dz_mode = 5e-6
+ds_factor = 2
 
-fiber = np.load('rod_GRIN.npy')
-fiber = fiber[::ds_factor, ::ds_factor]
+total_power = 63000
+input_type = "mode_mixing"
+position = "on"
+waveguide_type = "fiber"
+seed = 2
 
-print(f'index distribution shape : {fiber.shape}')
+Lx, Ly = 100e-6, 100e-6
+unit = 1e-6
 
-# Create individual 
-for i in range(field.shape[0]):
+extent = [-Lx/2/unit, Lx/2/unit, -Ly/2/unit, Ly/2/unit]
+extent = [-Lx/2/unit, Lx/2/unit, -Ly/2/unit, Ly/2/unit]
+radius = 26e-6 / unit
 
-    vmin = np.min(field[i])
-    vmax = np.max(field[i])
-    norm = Normalize(vmin=vmin, vmax=vmax)
+fiber_index = np.load(f'./data/GRIN_{waveguide_type}_indices.npy')
+fields = np.load(f'./data/optimized_field_arr_LP11.npy', )
 
-    fig, ax = plt.subplots(figsize=(6, 6))
-    im = ax.imshow(field[i], cmap='turbo', norm=norm, origin='lower',)
-    
 
-    x_tick_positions = [0, 255 , 511]
-    x_tick_labels = [-1000, 0, 1000]
-    plt.xticks(ticks=x_tick_positions, labels=x_tick_labels)
-    plt.xlabel(r'x ($\mu m$)')
+fiber_index_ds = fiber_index[::4, ::4]
 
-    # y_tick_positions = [0, 127.5, 255.5]
-    x_tick_labels = [-1000, 0, 1000]
-    plt.yticks(ticks=y_tick_positions, labels=y_tick_labels)
-    plt.ylabel(r'y ($\mu m$)')
+x_window = fiber_index_ds.shape[0] // 4
+y_window = fiber_index_ds.shape[1] // 4
+fiber_index_ds = fiber_index_ds[(fiber_index_ds.shape[0]//2 - x_window):(fiber_index_ds.shape[0]//2 + x_window), (fiber_index_ds.shape[1]//2 - y_window):(fiber_index_ds.shape[1]//2 + y_window)]
 
-    # Add colorbar
-    # divider = make_axes_locatable(ax)
-    # cax = divider.append_axes("right", size="5%", pad=0.1)
-    # plt.colorbar(im, cax=cax)
-    
-    # Add frame number
-    # ax.set_title(f'Frame {i}')
+animation_filename = f'{waveguide_type}_{input_type}_{position}_{int(total_power)}'
+# plot_input_and_output_beam(input_field, output_field, radius=radius, indices=fiber_index, extent=extent, interpolation="bilinear")
+make_3d_animation(fields, indices=fiber_index_ds, radius=radius, filename=animation_filename, extent=extent, interpolation="bilinear")
+# plot_energy_evolution(energies, dz=dz)
+# plot_mode_evolution(modes, dz=dz_mode)
+# plot_3d_profile(fields)
+# plot_input_and_output_modes(input_field, output_field)
 
-    # Add fiber structure
-    ax.contour(fiber, levels=[np.min(fiber)], colors='white', linewidths=2)
-    
-    # Save frame
-    plt.savefig(f'frames/frame_{i:03d}.png')
-    plt.close()
-
-# Create MP4 using imageio
-fps = 10  # Frames per second
-with imageio.get_writer(filename + '.mp4', fps=fps) as writer:
-    for i in range(field.shape[0]):
-        image = imageio.imread(f'frames/frame_{i:03d}.png')
-        writer.append_data(image)
-
-print(f"MP4 created: {filename}")
+plt.show()
