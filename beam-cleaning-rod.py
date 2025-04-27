@@ -28,8 +28,8 @@ Lx, Ly = 2000e-6, 2000e-6
 Nx, Ny = 4096, 4096
 ds_factor = 4
 
-total_z = 0.20
-dz = 5e-6
+total_z = 0.30
+dz = 3e-6
 
 # total_power = 1.6e3
 # input_type = "mode_mixing"
@@ -40,11 +40,11 @@ mode_decompose = True
 
 input_type = "mode_mixing"
 waveguide_type = "rod"
-positions = ["off"]
-total_powers = [1.6e6]
+positions = ["off", "on"]
+total_powers = [5.0e6, 1.6e7]
 
 num_samples = 500
-target_modes = (0, 2, 4, 5, 7, 8, 9, 10, 11, 12, 15, 17, 18, 20)
+target_modes = (0, 2, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 22, 23)
 num_modes = len(target_modes)
 coefficients = np.zeros((num_modes, 2), dtype=complex)
 for i, n in enumerate(target_modes):
@@ -126,8 +126,8 @@ for position, total_power in combinations:
     np.save(f'./data/output_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', output)
     np.save(f'./data/fields_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', fields)
     np.save(f'./data/energies_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', energies)
-    np.save(f'Knls_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', Knls)
-    np.save(f'Kins_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', Kins)
+    # np.save(f'Knls_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', Knls)
+    # np.save(f'Kins_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', Kins)
 
 # plot_index_profile(fiber_index)
 # plot_beam_intensity(input_field, indices=index_distribution, interpolation="bilinear")

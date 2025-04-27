@@ -14,8 +14,9 @@ from src.modes import calculate_modes, decompose_modes, n_to_lm
 plt.rcParams['font.size'] = 15
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
-np.random.seed(42)
-torch.manual_seed(42)
+seed = 42
+np.random.seed(seed)
+torch.manual_seed(seed)
 
 class FiberPropagationModel:
     def __init__(self, n_core, NA, fiber_radius, input_radius, gamma=0.0, 
@@ -49,8 +50,6 @@ class FiberPropagationModel:
             self.dtype = torch.complex64
             self.float_dtype = torch.float32
         
-        
-
         # 그리드 초기화
         self.initialize_grid()
         
@@ -83,23 +82,12 @@ class FiberPropagationModel:
         delta_tensor = torch.tensor(delta, dtype=self.float_dtype, device=self.device)
         
         n_profile = torch.zeros_like(self.R)
-        # mask = self.R <= self.fiber_radius
-        # n_profile[mask] = self.n_core * torch.sqrt(1 - 2 * delta_tensor * (self.R[mask] / self.fiber_radius)**2)
-        # n_profile[~mask] = self.n_core * torch.sqrt(1 - 2 * delta_tensor)
         n_profile[torch.where(self.R > self.fiber_radius)] = self.n_clad
         n_profile[torch.where(self.R <= self.fiber_radius)] = self.n_core * torch.sqrt(1 - 2 * delta * (self.R[torch.where(self.R <= self.fiber_radius)]/self.fiber_radius)**2) 
-        # Delta = (self.n_core - self.n_clad) / self.n_core
-        # 굴절률 차이
-        self.delta_n = n_profile - self.n_clad
         
         kz = ((self.k0 * self.n_clad)**2 - self.KX**2 - self.KY**2).to(self.dtype)
         kz = torch.sqrt(kz)
         self.diffraction_op = torch.exp(1j * kz  * self.dz / 2)
-
-        # 회절 연산자 (주파수 영역)
-        # self.diffraction_op = torch.exp(-1j * self.KR2 * self.dz / 2 / (2 * self.k0 * self.n_clad)).to(self.dtype)
-        
-        # 굴절 연산자 (공간 영역)
         kin = self.k0 * (n_profile - self.n_clad)
         self.refraction_op = torch.exp(1j * kin * self.dz).to(self.dtype)
     
@@ -168,23 +156,13 @@ class FiberPropagationModel:
         return field * torch.exp(1j * nonlinear_phase) * self.refraction_op
 
     def propagate_one_step(self, E_real,):
-        
- 
-
         """한 스텝 빔 전파"""
         # 회절 단계
         E_fft = torch.fft.fft2(E_real)
         E_fft = E_fft * self.diffraction_op
         E_real = torch.fft.ifft2(E_fft)
         
-        # E_real = E_real * self.refraction_op
         E_real = self.apply_nonlinearity(E_real)
-        # 굴절 및 비선형 단계
-        # if self.gamma > 0:
-            # intensity = 
-        # nonlinear_phase = 
-        # field = field * torch.exp(1j * self.gamma * torch.abs(field)**2 * self.dz) * self.refraction_op
-        # else:
         
         E_fft = torch.fft.fft2(E_real)
         E_fft = E_fft * self.diffraction_op
@@ -238,10 +216,44 @@ class FiberPropagationModel:
         
         # 최대화를 위해 음수 반환
         return -overlap
+    
+    def LP_modes(self, l, m,):
+        grid = grids.Grid(pixel_size=self.domain_size/self.N, pixel_numbers=(self.N, self.N))
+        grin_fiber = GrinFiber(radius=self.fiber_radius, wavelength=self.wvl0, n1=self.n_core, n2=self.n_clad)
+        mode = GrinLPMode(l, m)
+        mode.compute(grin_fiber, grid)
+        field = torch.tensor(mode._fields[:, :, 0])
+    
+        return field.to(self.device)
+    
+    def mode_mixing(self, num_mode, coefficients=None, cx=0, cy=0,):
+        grid = grids.Grid(pixel_size=self.domain_size/self.N, pixel_numbers=(self.N, self.N))
+        grin_fiber = GrinFiber(radius=self.fiber_radius, wavelength=self.wvl0, n1=self.n_core, n2=self.n_clad)
+        
+        total_field = torch.zeros_like(self.X, dtype=self.dtype, device=self.device)
+        for n in range(num_mode):
+            l, m = n_to_lm(n+1)
+            mode = GrinLPMode(l, m)
+            mode.compute(grin_fiber, grid)
+            
+            if l== 0:
+                field = torch.tensor(mode._fields[:, :, 0]) 
+                total_field += field * coefficients[n, 0]
+            else:
+                field = torch.tensor(mode._fields)
+                field = field[:, :, 0] * coefficients[n, 0] + field[:, :, 1] * coefficients[n,1]
+                total_field += field
+        
+        dx = self.domain_size / self.N
+        dy = self.domain_size / self.N
+        total_field = normalize_field_to_power(total_field.to(self.device), dx, dy, self.power)
+        # move total field with cx and cy
+        total_field = torch.roll(total_field, shifts=(int(cx/dx), int(cy/dy)), dims=(0, 1))
+        return total_field.to(self.device)
 
     def optimize_phases(self, target_mode=None, num_iterations=100, learning_rate=0.01, use_checkpoint=True):
         if target_mode is None:
-            target_mode = self.LP_modes(2, 1) 
+            target_mode = self.LP_modes(1, 1) 
         
         # 초기 위상 값 (0-2π 랜덤 값으로 초기화)
         initial_phases = 2 * torch.pi * torch.rand(256, dtype=self.float_dtype, device=self.device)
@@ -265,71 +277,15 @@ class FiberPropagationModel:
             
             # 입력 필드 생성
             input_field = self.amplitude * torch.exp(1j * phase_map)
-            # plot input_field
-            # input_field_val = input_field.detach().cpu().numpy()
-            # # 코어-클래딩 경계 계산
-            # theta = np.linspace(0, 2*np.pi, 100)
-            # core_radius_px = self.fiber_radius / (self.domain_size/self.N) # 픽셀 단위 코어 반지름
-            # center_px = self.N // 2
-            # core_x = center_px + core_radius_px * np.cos(theta)
-            # core_y = center_px + core_radius_px * np.sin(theta)
-            # plt.plot(core_y, core_x, 'w-', linewidth=1.5)  # 코어 경계 표시
-        
-            # plt.imshow(np.abs(input_field_val)**2, cmap='turbo')
-            # plt.colorbar(label='Intensity')
-            # plt.title('Input Field Intensity')
-            # plt.show()
 
-            # 전파
             output_field = self.propagate(input_field, use_checkpoint)
             
-            # theta = np.linspace(0, 2*np.pi, 100)
-            # core_radius_px = self.fiber_radius / (self.domain_size/self.N) # 픽셀 단위 코어 반지름
-            # center_px = self.N // 2
-            # core_x = center_px + core_radius_px * np.cos(theta)
-            # core_y = center_px + core_radius_px * np.sin(theta)
-            # plt.plot(core_y, core_x, 'w-', linewidth=1.5)  # 코어 경계 표시
-        
-            # plt.imshow(np.abs(output_field.detach().cpu().numpy())**2, cmap='turbo', interpolation="bilinear")
-            # plt.colorbar(label='Intensity')
-            # plt.title('Input Field Intensity')
-            # plt.show()
-
-
-            # 목적 함수 계산 (출력 필드와 타겟 모드 간의 중첩)
-            objective = self.compute_mode_overlap_objective(output_field, target_mode)
-            
-            # 목적 함수 값 기록
-            objective_values.append(objective.item())
-            overlap_values.append(-objective.item())  # 실제 중첩 값 (양수)
-            
-            # 역전파
-            objective.backward()
-            
-            # 파라미터 업데이트
-            optimizer.step()
-            
-            # 위상값을 0-2π 범위로 제한 (옵션)
-            with torch.no_grad():
-                phases.data = phases.data % (2 * torch.pi)
-            
-            # 진행 상황 출력
-            print(f"Iteration {i+1}, Overlap: {overlap_values[-1]:.6f}")
         
         # 최적화된 위상값과 초기 위상값 반환
         return (phases.detach().cpu().reshape(16, 16), 
                 initial_phases.detach().cpu().reshape(16, 16), 
                 objective_values,
                 overlap_values, target_mode.detach().cpu().numpy())
-    
-    def LP_modes(self, l, m,):
-        grid = grids.Grid(pixel_size=self.domain_size/self.N, pixel_numbers=(self.N, self.N))
-        grin_fiber = GrinFiber(radius=self.fiber_radius, wavelength=self.wvl0, n1=self.n_core, n2=self.n_clad)
-        mode = GrinLPMode(l, m)
-        mode.compute(grin_fiber, grid)
-        field = torch.tensor(mode._fields[:, :, 0])
-    
-        return field.to(self.device)
 
     def visualize_results(self, optimized_phases, initial_phases, target_mode, overlap_values=None):
         with torch.no_grad():
@@ -461,15 +417,13 @@ model = FiberPropagationModel(
 )
 
 
-# 위상 최적화
-optimized_phases, initial_phases, objective_values, overlap_values, target_mode = model.optimize_phases(
-    num_iterations=30,
-    learning_rate=0.10,
-    use_checkpoint=True
-)
+# Run simulation
+
+output, fields = model.run()
+
 
 # 결과 시각화
-model.visualize_results(
+model.plot_fields(
     optimized_phases, 
     initial_phases, 
     target_mode,
@@ -477,6 +431,8 @@ model.visualize_results(
 )
 
 objective_values = np.array(objective_values)
+
+np.save(f'./data/fields_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', fields)
 
 # 목적 함수 값 변화 그래프
 plt.figure(figsize=(10, 5))

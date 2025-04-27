@@ -8,13 +8,13 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 num_samples = 100
 
-total_length = 0.15
+total_length = 0.20
 dz=total_length / num_samples
 
-dz_mode = 1e-5
+dz_mode = 3e-6
 ds_factor = 2
 
-total_power = 160000
+total_power = 1.6e7
 input_type = "mode_mixing"
 position = "off"
 waveguide_type = "rod"
