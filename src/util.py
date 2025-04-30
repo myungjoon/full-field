@@ -262,6 +262,7 @@ def make_3d_animation(fields, indices=None, filename=None, extent=None, radius=1
         os.makedirs('frames')
 
     num_frames = intensities.shape[0]
+    plt.figure()
     for i in range(num_frames):
 
         vmin = np.min(intensities[i])

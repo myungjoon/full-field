@@ -241,7 +241,7 @@ class FiberPropagationModel:
 
     def optimize_phases(self, target_mode=None, num_iterations=100, learning_rate=0.01, use_checkpoint=True):
         if target_mode is None:
-            target_mode = self.LP_modes(2, 1) 
+            target_mode = self.LP_modes(1, 1) 
         
         # 초기 위상 값 (0-2π 랜덤 값으로 초기화)
         initial_phases = 2 * torch.pi * torch.rand(256, dtype=self.float_dtype, device=self.device)
@@ -349,8 +349,8 @@ class FiberPropagationModel:
         
         initial_field_arr = initial_field_arr.cpu().numpy()
         optimized_field_arr = optimized_field_arr.cpu().numpy()
-        np.save('initial_field_arr.npy', initial_field_arr)
-        np.save('optimized_field_arr.npy', optimized_field_arr)
+        np.save('initial_field_arr_22.npy', initial_field_arr)
+        np.save('optimized_field_arr_22.npy', optimized_field_arr)
 
         # 코어-클래딩 경계 계산
         theta = np.linspace(0, 2*np.pi, 100)
@@ -463,7 +463,7 @@ model = FiberPropagationModel(
 
 # 위상 최적화
 optimized_phases, initial_phases, objective_values, overlap_values, target_mode = model.optimize_phases(
-    num_iterations=30,
+    num_iterations=12,
     learning_rate=0.10,
     use_checkpoint=True
 )

@@ -28,7 +28,7 @@ extent = [-Lx/2/unit, Lx/2/unit, -Ly/2/unit, Ly/2/unit]
 radius = 26e-6 / unit
 
 fiber_index = np.load(f'./data/GRIN_{waveguide_type}_indices.npy')
-fields = np.load(f'./data/optimized_field_arr_LP11.npy', )
+fields = np.load(f'./initial_field_arr_21.npy', )
 
 
 fiber_index_ds = fiber_index[::4, ::4]

@@ -14,7 +14,7 @@ from src.modes import calculate_modes, decompose_modes, n_to_lm
 plt.rcParams['font.size'] = 15
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
-seed = 42
+seed = 43
 np.random.seed(seed)
 torch.manual_seed(seed)
 
@@ -112,7 +112,7 @@ class FiberPropagationModel:
         self.amplitude = self.amplitude * torch.sqrt(total_power / current_power)
         
         # 확인: 정규화 후 총 파워 계산
-        normalized_power = torch.sum(torch.abs(self.amplitude)**2)
+        normalized_power = torch.sum(torch.abs(self.amplitude)**2) * dx**2
         print(f"Total input power: {normalized_power.item():.6f} W")
     
     def create_phase_map(self, phases):
@@ -122,22 +122,26 @@ class FiberPropagationModel:
         # 위상 맵 초기화
         phase_map = torch.zeros_like(self.R)
         
-        # 코어 영역 정의 (중앙 128x128)
+        
+
+        # 코어 영역 정의
         N_phase = phase_map.shape[0]
         N_phase_half = N_phase // 2
         core_start = (self.N - N_phase_half) // 2
-        core_end = core_start + N_phase_half
         
         # 매크로픽셀 크기 계산 (코어 영역을 16x16 매크로픽셀로 나눔)
         macropixel_size = N_phase_half // 16  # 각 매크로픽셀은 8x8 그리드 포인트로 구성
         
         # phases가 1차원이라면 16x16으로 변환
         if phases.dim() == 1:
-            phases = phases.reshape(16, 16)
+            N_pixel = int(np.sqrt(len(phases)))
+            phases = phases.reshape(N_pixel, N_pixel)
+        else:
+            N_pixel = phases.shape[0]
         
         # 각 매크로픽셀에 해당하는 위상 적용
-        for i in range(16):
-            for j in range(16):
+        for i in range(N_pixel):
+            for j in range(N_pixel):
                 # 매크로픽셀의 그리드 범위 계산
                 row_start = core_start + i * macropixel_size
                 row_end = row_start + macropixel_size
@@ -250,6 +254,29 @@ class FiberPropagationModel:
         # move total field with cx and cy
         total_field = torch.roll(total_field, shifts=(int(cx/dx), int(cy/dy)), dims=(0, 1))
         return total_field.to(self.device)
+
+    def run(self,):
+        N_pixel = 32
+        random_phases = 2 * torch.pi * torch.rand(N_pixel**2, dtype=self.float_dtype, device=self.device)
+        # phases = initial_phases.clone().requires_grad_(True)  # 미분 가능한 복사본 생성
+        
+        # # 최적화기 설정
+        # optimizer = torch.optim.Adam([phases], lr=learning_rate)
+        
+        # # 목적 함수 값 기록
+        # objective_values = []
+        # overlap_values = []
+        
+    
+        # 위상 맵 생성
+        phase_map = self.create_phase_map(random_phases)
+        # 입력 필드 생성
+        input_field = self.amplitude * torch.exp(1j * phase_map)
+        output, field_arr = self.propagate(input_field, recording=True)
+            
+        
+        # 최적화된 위상값과 초기 위상값 반환
+        return output.detach().cpu().numpy(), field_arr.detach().cpu().numpy()
 
     def optimize_phases(self, target_mode=None, num_iterations=100, learning_rate=0.01, use_checkpoint=True):
         if target_mode is None:
@@ -397,47 +424,48 @@ class FiberPropagationModel:
     
 
 
-wvl = 1064e-9  # 파장 (m)
+wvl = 775e-9  # 파장 (m)
 k0 = 2 * np.pi / wvl  # 파수 (m^-1)
 gamma = 2.3e-20*k0
+
+# for power in powers:
 # 모델 초기화
-model = FiberPropagationModel(
-    n_core=1.47,
-    NA=0.1950,
-    fiber_radius=26e-6,
-    input_radius=20e-6,
-    gamma=gamma,  # 비선형성 정도 (0이면 선형)
-    domain_size=100e-6,
-    N=512,
-    dz=5e-6,
-    k0=k0,
-    L=1.0,
-    power=100000.0,
-    use_complex128=False,
-)
+fiber_radius_list = [25e-6, 50e-6, 100e-6, 200e-6]
+input_radius_list = [20e-6, 40e-6, 50e-6, 50e-6]
+N_list = [512, 1024, 2048, 4096]
+ds_list = [1, 1, 2, 4]
+power_list = [50000, 100000, 500000, 750000, 1000000]
 
 
-# Run simulation
+for i in range(len(fiber_radius_list)):
+    # fiber_radius = fiber_radius_list[i]
+    fiber_radius = 450e-6
+    N = 4096
+    input_radius = 200e-6
+    ds = 4
+    power = power_list[i]
+    # input_radius = input_radius_list[i]
+    
+    # N = N_list[i]
+    # ds = ds_list[i]
+    
+    
+    model = FiberPropagationModel(
+        n_core=1.47,
+        NA=0.25,
+        fiber_radius=fiber_radius,
+        input_radius=input_radius,
+        gamma=gamma, 
+        domain_size=fiber_radius*4,
+        N=N,
+        dz=1e-6,
+        k0=k0,
+        L=0.3,
+        power=power,
+        use_complex128=False,
+    )
 
-output, fields = model.run()
-
-
-# 결과 시각화
-model.plot_fields(
-    optimized_phases, 
-    initial_phases, 
-    target_mode,
-    overlap_values
-)
-
-objective_values = np.array(objective_values)
-
-np.save(f'./data/fields_{waveguide_type}_{input_type}_{position}_{int(total_power)}_{seed}_{dz}.npy', fields)
-
-# 목적 함수 값 변화 그래프
-plt.figure(figsize=(10, 5))
-plt.plot(-1 * objective_values)
-plt.xlabel('Iteration')
-plt.ylabel('Objective Value')
-plt.grid(True)
-plt.show()
+    output, fields = model.run()
+    fields = fields[:, ::ds, ::ds]
+    np.save(f'./claude_gaussian_{fiber_radius}_{input_radius}_{int(power)}_fields_on.npy', fields)
+    np.save(f'./claude_gaussian__{fiber_radius}_{input_radius}_{int(power)}_output_on.npy', output)
