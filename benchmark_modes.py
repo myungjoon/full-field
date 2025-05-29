@@ -9,19 +9,20 @@ from src.modes import calculate_modes, decompose_modes, n_to_lm
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
-seed = 100
-np.random.seed(seed)
 
 # arguments for total_power, beam_radius, position
 parser = argparse.ArgumentParser(description='Simulation parameters')
+parser.add_argument('--seed', type=int, default=100, help='Random seed for reproducibility')
 parser.add_argument('--input_type', type=str, default='mode', choices=['gaussian', 'mode'], help='Input type')
-parser.add_argument('--num_modes', type=int, default=5, help='Number of input modes')
+parser.add_argument('--num_modes', type=int, default=30, help='Number of input modes')
 parser.add_argument('--total_power', type=float, default=1600e3, help='Total power (W)')
 parser.add_argument('--beam_radius', type=float, default=50e-6, help='Beam radius (m)')
 parser.add_argument('--position', type=str, default='on', choices=['on', 'off'], help='Beam position')
 parser.add_argument('--disorder', type=bool, default=False, help='Disorder in the fiber')
 parser.add_argument('--precision', type=str, default='single', choices=['single', 'double'], help='Precision of the simulation')
 parser.add_argument('--num_pixels', type=int, default=32, help='Number of pixels for the phase map')
+parser.add_argument('--scale', type=float, default=2.0, help='Scale factor for the input beam')
+parser.add_argument('--in_phase', type=bool, default=True, help='Input beam in phase')
 parser.add_argument('--device_id', type=int, default=1, help='Device ID for CUDA')
 
 args = parser.parse_args()
@@ -34,14 +35,15 @@ else:
     raise ValueError('Invalid input type. Choose either "gaussian" or "mode".')
 
 
-in_phase = True
 
 print(f'Total power: {args.total_power * 1e-3} kW')
 print(f'Beam position: {args.position}')
 print(f'Disorder: {args.disorder}')
 print(f'Precision: {args.precision}')
 print(f'Number of pixels: {args.num_pixels}x{args.num_pixels}')
-print(f'Input in phase: {in_phase}')
+print(f'Input in phase: {args.in_phase}')
+print(f'Scale factor: {args.scale}')
+seed = args.seed
 input_type = args.input_type
 total_power = args.total_power
 position = args.position
@@ -50,7 +52,11 @@ precision = args.precision
 num_pixels = args.num_pixels
 beam_radius = args.beam_radius
 num_modes = args.num_modes
+in_phase = args.in_phase
+scale = args.scale
 device_id = args.device_id
+
+np.random.seed(seed)
 
 device = torch.device(f'cuda:{device_id}' if torch.cuda.is_available() else 'cpu')
 
@@ -96,11 +102,12 @@ pixels = (num_pixels, num_pixels)
 
 input_beam = Input(domain, wvl0, n_core, n_clad, 
                     type=input_type, cx=cx, cy=cy, pixels=pixels, in_phase=in_phase,
-                    power=total_power, precision=precision,
+                    power=total_power, precision=precision, scale=scale,
                     beam_radius=beam_radius, num_modes=num_modes, fiber_radius=fiber_radius, device=device)
 
 input_field = input_beam.field.cpu().numpy()
-
+# plot_beam_intensity_and_phase(input_field, indices=fiber_indices, extent=extent, interpolation="bilinear")
+# plt.show()
 # print_total_power(domain, input_field)
 
 print(f'The simulation starts.')
@@ -115,10 +122,10 @@ np.save(f'fiber_{fiber_radius}_indices.npy', fiber_index)
 
 # plot_beam_intensity(input_field, indices=fiber_index, interpolation="bilinear")
 if input_type == 'mode':
-    np.save(f'input_{input_type}_{num_modes}_{position}_{int(total_power)}_{in_phase}.npy', input_field)
-    np.save(f'fields_{input_type}_{num_modes}_{position}_{int(total_power)}_{in_phase}.npy', fields)
-    np.save(f'modes_{input_type}_{num_modes}_{position}_{int(total_power)}_{dz}_{in_phase}.npy', modes)
-    animation_filename = f'./results/{input_type}_{num_modes}_{position}_{int(total_power)}'
+    np.save(f'input_{input_type}_{num_modes}_{position}_{int(total_power)}_{in_phase}_{scale}.npy', input_field)
+    np.save(f'fields_{input_type}_{num_modes}_{position}_{int(total_power)}_{in_phase}_{scale}.npy', fields)
+    np.save(f'modes_{input_type}_{num_modes}_{position}_{int(total_power)}_{in_phase}_{scale}.npy', modes)
+    animation_filename = f'./results/{input_type}_{num_modes}_{position}_{int(total_power)}_{in_phase}_{scale}'
 else:
     np.save(f'input_{fiber_radius}_{beam_radius}_{position}_{int(total_power)}.npy', input_field)
     np.save(f'fields_{fiber_radius}_{beam_radius}_{position}_{int(total_power)}.npy', fields)
@@ -129,6 +136,5 @@ else:
         animation_filename = f'./results/{input_type}_{beam_radius}_{position}_{num_pixels}x{num_pixels}_{int(total_power)}'
 
 
-# plot_beam_intensity_and_phase(input_field, indices=fiber_indices, extent=extent, interpolation="bilinear")
 make_3d_animation(fields, radius=fiber_radius, filename=animation_filename, interpolation="bilinear")
 # plt.show()

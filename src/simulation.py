@@ -134,7 +134,7 @@ class Fiber:
 
 class Input:
     def __init__(self, domain, wvl0, n_core, n_clad, type="gaussian", beam_radius=50e-6, fiber_radius=0., num_modes=0,
-                 power=1.0, phase_modulation=False, pixels=(32, 32), in_phase=False, cx=0, cy=0, l=0, m=1, precision='single', device='cpu'):
+                 power=1.0, phase_modulation=False, pixels=(32, 32), in_phase=False, scale=1.0, cx=0, cy=0, l=0, m=1, precision='single', device='cpu'):
         
         self.domain = domain
         self.wvl0 = wvl0
@@ -154,7 +154,7 @@ class Input:
         if type=="gaussian":
             self.field = self.gaussian_beam(beam_radius, cx=cx, cy=cy, phase_modulation=phase_modulation, pixels=pixels)
         elif type=="mode":
-            self.field = self.mode_mixing(num_modes, cx=cx, cy=cy, in_phase=in_phase)
+            self.field = self.mode_mixing(num_modes, cx=cx, cy=cy, scale=scale, in_phase=in_phase)
         elif type=="speckle":
             self.field = self.speckle_beam(cx=cx, cy=cy, pixels=pixels)
         elif type=="single mode":
@@ -232,7 +232,7 @@ class Input:
         # field = normalize_field_to_power(field, self.domain.X, self.domain.Y, self.power)
         return field.to(self.device)
 
-    def mode_mixing(self, num_mode, coefficients=None, cx=0, cy=0, in_phase=False):
+    def mode_mixing(self, num_mode, coefficients=None, cx=0, cy=0, scale=1.0, in_phase=False):
         grid = grids.Grid(pixel_size=self.domain.Lx/self.domain.Nx, pixel_numbers=(self.domain.Nx, self.domain.Ny))
         grin_fiber = GrinFiber(radius=self.fiber_radius, wavelength=self.wvl0, n1=self.n_core, n2=self.n_clad)
         
@@ -256,9 +256,60 @@ class Input:
         
         dx = self.domain.Lx / self.domain.Nx
         dy = self.domain.Ly / self.domain.Ny
+        total_field = scale_field(total_field, scale)
         total_field = normalize_field_to_power(total_field.to(self.device), dx, dy, self.power)
         total_field = torch.roll(total_field, shifts=(int(cx/dx), int(cy/dy)), dims=(0, 1))
+
+        
+
         return total_field.to(self.device)
+
+
+def scale_field(input_field, scale_factor):
+    # 디바이스 및 dtype 보존
+    device = input_field.device
+    dtype = input_field.dtype
+    
+    # 중심점 계산
+    center = 2048.0  # 4096 / 2
+    
+    # 새로운 좌표 그리드 생성
+    y_coords = torch.arange(4096, device=device, dtype=torch.float32)
+    x_coords = torch.arange(4096, device=device, dtype=torch.float32)
+    y_grid, x_grid = torch.meshgrid(y_coords, x_coords, indexing='ij')
+    
+    # 중심을 기준으로 좌표를 스케일링
+    # 원래 좌표 = (새 좌표 - 중심) / 배율 + 중심
+    orig_y = (y_grid - center) / scale_factor + center
+    orig_x = (x_grid - center) / scale_factor + center
+    
+    # 유효한 범위 내의 좌표만 선택
+    valid_mask = ((orig_y >= 0) & (orig_y < 4096) & 
+                  (orig_x >= 0) & (orig_x < 4096))
+    
+    # 결과 텐서 초기화
+    scaled_field = torch.zeros((4096, 4096), device=device, dtype=dtype)
+    
+    # 이중선형 보간을 사용한 값 할당
+    y_floor = torch.floor(orig_y[valid_mask]).long()
+    x_floor = torch.floor(orig_x[valid_mask]).long()
+    y_ceil = torch.clamp(y_floor + 1, max=4095)
+    x_ceil = torch.clamp(x_floor + 1, max=4095)
+    
+    # 보간 가중치 계산
+    dy = orig_y[valid_mask] - y_floor.float()
+    dx = orig_x[valid_mask] - x_floor.float()
+    
+    # 이중선형 보간
+    scaled_field[valid_mask] = (
+        input_field[y_floor, x_floor] * (1 - dx) * (1 - dy) +
+        input_field[y_floor, x_ceil] * dx * (1 - dy) +
+        input_field[y_ceil, x_floor] * (1 - dx) * dy +
+        input_field[y_ceil, x_ceil] * dx * dy
+    )
+    
+    return scaled_field
+
 
 def normalize_field_to_power(E_field, dx, dy, P_target):
     """
