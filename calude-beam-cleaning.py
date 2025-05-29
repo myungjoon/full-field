@@ -130,7 +130,7 @@ class FiberPropagationModel:
         core_start = (self.N - N_phase_half) // 2
         
         # 매크로픽셀 크기 계산 (코어 영역을 16x16 매크로픽셀로 나눔)
-        macropixel_size = N_phase_half // 16  # 각 매크로픽셀은 8x8 그리드 포인트로 구성
+        macropixel_size = N_phase_half // N_phase  # 각 매크로픽셀은 8x8 그리드 포인트로 구성
         
         # phases가 1차원이라면 16x16으로 변환
         if phases.dim() == 1:
@@ -256,7 +256,7 @@ class FiberPropagationModel:
         return total_field.to(self.device)
 
     def run(self,):
-        N_pixel = 32
+        N_pixel = 256
         random_phases = 2 * torch.pi * torch.rand(N_pixel**2, dtype=self.float_dtype, device=self.device)
         # phases = initial_phases.clone().requires_grad_(True)  # 미분 가능한 복사본 생성
         
@@ -424,6 +424,8 @@ class FiberPropagationModel:
     
 
 
+device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+
 wvl = 775e-9  # 파장 (m)
 k0 = 2 * np.pi / wvl  # 파수 (m^-1)
 gamma = 2.3e-20*k0
@@ -434,16 +436,17 @@ fiber_radius_list = [25e-6, 50e-6, 100e-6, 200e-6]
 input_radius_list = [20e-6, 40e-6, 50e-6, 50e-6]
 N_list = [512, 1024, 2048, 4096]
 ds_list = [1, 1, 2, 4]
-power_list = [50000, 100000, 500000, 750000, 1000000]
+power_list = [1000000, 1500000, 500000, 100000, 250000]
 
+input_radius_list = [100e-6, 200e-6]
 
-for i in range(len(fiber_radius_list)):
-    # fiber_radius = fiber_radius_list[i]
+for i in range(5):
     fiber_radius = 450e-6
     N = 4096
-    input_radius = 200e-6
+    input_radius = 100e-6
     ds = 4
     power = power_list[i]
+    # power = power_list[i]
     # input_radius = input_radius_list[i]
     
     # N = N_list[i]
@@ -458,14 +461,15 @@ for i in range(len(fiber_radius_list)):
         gamma=gamma, 
         domain_size=fiber_radius*4,
         N=N,
-        dz=1e-6,
+        dz=3e-6,
         k0=k0,
         L=0.3,
         power=power,
         use_complex128=False,
+        device=device,
     )
 
     output, fields = model.run()
     fields = fields[:, ::ds, ::ds]
-    np.save(f'./claude_gaussian_{fiber_radius}_{input_radius}_{int(power)}_fields_on.npy', fields)
-    np.save(f'./claude_gaussian__{fiber_radius}_{input_radius}_{int(power)}_output_on.npy', output)
+    np.save(f'./claude_gaussian_256pixel_{fiber_radius}_{input_radius}_{int(power)}_fields_on.npy', fields)
+    np.save(f'./claude_gaussian_256pixel_{fiber_radius}_{input_radius}_{int(power)}_output_on.npy', output)

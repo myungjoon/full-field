@@ -104,6 +104,57 @@ def plot_beam_intensity(field, indices=None, extent=None, interpolation=None):
     if indices is not None:
         ax.contour(indices, levels=[np.min(indices)], colors='white', linewidths=2)
 
+def plot_beam_intensity_and_phase(field, indices=None, extent=None, interpolation=None):
+    fig, ax = plt.subplots(1, 2, figsize=(13, 5))
+
+    eps = 1e-5
+    # extent = [-450, 450, -450, 450]
+    xtick = np.linspace(0, field.shape[1]+eps, 5)
+    ytick = np.linspace(0, field.shape[0]+eps, 5)
+    xlabel = np.linspace(extent[0], extent[1], 5)
+    ylabel = np.linspace(extent[2], extent[3], 5)
+
+    if interpolation is not None:
+        im = ax[0].imshow(np.abs(field)**2, cmap='turbo', interpolation=interpolation)
+    else:
+        im = ax[0].imshow(np.abs(field)**2, cmap='turbo',)
+    ax[0].set_xticks(xtick)
+    ax[0].set_yticks(ytick)
+    ax[0].set_xticklabels([f'{x}' for x in xlabel])
+    ax[0].set_yticklabels([f'{y}' for y in ylabel])
+
+    ax[0].set_xlabel(r'x ($\mu m$)')
+    ax[0].set_ylabel(r'y ($\mu m$)')
+    
+    # colorbar
+    divider = make_axes_locatable(ax[0])
+    cax = divider.append_axes("right", size="5%", pad=0.1)
+    fig.colorbar(im, cax=cax)
+
+    if indices is not None:
+        ax[0].contour(indices, levels=[np.min(indices)], colors='white', linewidths=2)
+
+    if interpolation is not None:
+        im = ax[1].imshow(np.angle(field), cmap='turbo', interpolation=interpolation)
+    else:
+        im = ax[1].imshow(np.angle(field), cmap='turbo',)
+        
+    ax[1].set_xticks(xtick)
+    ax[1].set_yticks(ytick)
+    ax[1].set_xticklabels([f'{x}' for x in xlabel])
+    ax[1].set_yticklabels([f'{y}' for y in ylabel])
+
+    ax[1].set_xlabel(r'x ($\mu m$)')
+    ax[1].set_ylabel(r'y ($\mu m$)')
+    
+    # colorbar
+    divider = make_axes_locatable(ax[1])
+    cax = divider.append_axes("right", size="5%", pad=0.1)
+    fig.colorbar(im, cax=cax)
+
+    if indices is not None:
+        ax[1].contour(indices, levels=[np.min(indices)], colors='white', linewidths=2)
+
 def plot_beam_phase(field, indices=None, extent=None, interpolation=None):
     fig, ax = plt.subplots()
     
@@ -255,7 +306,15 @@ def plot_input_and_output_beam(input_field, output_field, radius=10, extent=None
 
     plt.tight_layout()
 
-def make_3d_animation(fields, indices=None, filename=None, extent=None, radius=10, interpolation=None):
+def print_total_power(domain, field):
+    """
+    Print the total power of the field.
+    """
+    # Calculate the total power
+    total_power = np.sum(np.abs(field)**2) * domain.dx * domain.dy
+    print(f'Total power: {total_power:.4f} W')
+
+def make_3d_animation(fields, radius=10, filename=None, extent=None, interpolation=None):
     intensities = np.abs(fields)**2
 
     if not os.path.exists('frames'):
@@ -269,6 +328,8 @@ def make_3d_animation(fields, indices=None, filename=None, extent=None, radius=1
         vmax = np.max(intensities[i])
         norm = Normalize(vmin=vmin, vmax=vmax)
 
+        extent = [-radius, radius, -radius, radius]
+
         fig, ax = plt.subplots(figsize=(6, 6))
         im = ax.imshow(intensities[i], cmap='turbo', norm=norm, origin='lower', extent=extent, interpolation=interpolation)
         # ax.set_xlim([-750, 750])
@@ -276,9 +337,16 @@ def make_3d_animation(fields, indices=None, filename=None, extent=None, radius=1
         plt.xlabel(r'x ($\mu m$)')
         plt.ylabel(r'y ($\mu m$)')
 
+        # Only plot the half of the image
+        ax.set_xlim([-radius, radius])
+        ax.set_ylim([-radius, radius])
+
         fiber = Circle((0, 0), radius, fill=False, linestyle='--', edgecolor='white', linewidth=2.0)
         ax.add_patch(fiber)
         
+        # At each frame, place text at the top right corner with the current propagation distance dz*i
+        current_z = i * 0.1  # Adjust this value based on your simulation parameters
+        ax.text(0.98, 0.98, f'z = {current_z:.2f} cm', transform=ax.transAxes, ha='right', va='top', fontsize=15, color='white')
         # Save frame
         plt.savefig(f'frames/frame_{i:03d}.png')
         plt.close()

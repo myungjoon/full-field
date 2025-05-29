@@ -3,7 +3,7 @@ import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-import os
+import os, argparse, time
 
 from mmfsim import grid as grids
 from mmfsim.fiber import GrinFiber
@@ -17,149 +17,16 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 np.random.seed(42)
 torch.manual_seed(42)
 
-class FiberPropagationModel:
-    def __init__(self, n_core, NA, fiber_radius, input_radius, gamma=0.0, 
-                 domain_size=50e-6, N=256, dz=5e-6, L=0.01, k0=0, power=1.0, wvl0=1064e-9,
-                 use_complex128=True, device=None):
-        """
-        광섬유 빔 전파 모델 초기화
-        """
-        self.wvl0 = wvl0    
-        self.n_core = n_core
-        self.NA = NA
-        self.n_clad = np.sqrt(n_core**2 - NA**2)
-        self.fiber_radius = fiber_radius
-        self.input_radius = input_radius
-        self.gamma = gamma
-        self.domain_size = domain_size
-        self.N = N
-        self.dz = dz
-        self.L = L
-        self.k0 = k0
-        self.num_steps = int(L / dz)
-        
-        # 장치 설정
-        self.device = device if device is not None else ('cuda' if torch.cuda.is_available() else 'cpu')
-        
-        # 정밀도 설정
-        if use_complex128:
-            self.dtype = torch.complex128
-            self.float_dtype = torch.float64
-        else:
-            self.dtype = torch.complex64
-            self.float_dtype = torch.float32
-        
-        
+# arguments for total_power, beam_radius, position
+parser = argparse.ArgumentParser(description='Simulation parameters')
+parser.add_argument('--total_power', type=float, default=500e3, help='Total power (W)')
+parser.add_argument('--beam_radius', type=float, default=50e-6, help='Beam radius (m)')
+parser.add_argument('--precision', type=str, default='single', choices=['single', 'double'], help='Precision of the simulation')
+parser.add_argument('--num_pixels', type=int, default=32, help='Number of pixels for the phase map')
+parser.add_argument('--device_id', type=int, default=0, help='Device ID for CUDA')
 
-        # 그리드 초기화
-        self.initialize_grid()
-        
-        # 연산자 초기화
-        self.initialize_operators()
-        
-        # 가우시안 진폭 초기화
-        self.initialize_amplitude(total_power=power)
+args = parser.parse_args()
 
-        self.absorption = torch.exp(-2*((torch.sqrt(self.X**2+self.Y**2)/(self.fiber_radius*1.5))**10))
-        self.absorption = self.absorption.to(device)
-    
-    def initialize_grid(self):
-        """그리드 초기화"""
-        dx = self.domain_size / self.N
-        x = torch.linspace(-self.domain_size/2, self.domain_size/2, self.N, dtype=self.float_dtype, device=self.device)
-        self.X, self.Y = torch.meshgrid(x, x, indexing='ij')
-        self.R = torch.sqrt(self.X**2 + self.Y**2)
-        
-        # 주파수 영역 설정
-        kx = 2 * np.pi * torch.fft.fftfreq(self.N, dx).to(dtype=self.float_dtype, device=self.device)
-        self.KX, self.KY = torch.meshgrid(kx, kx, indexing='ij')
-        self.KR2 = self.KX**2 + self.KY**2
-    
-    def initialize_operators(self):
-        """회절 및 굴절 연산자 초기화"""
-        
-        # GRIN 광섬유 굴절률 프로파일
-        delta = (self.n_core**2 - self.n_clad**2) / (2 * self.n_core**2)
-        delta_tensor = torch.tensor(delta, dtype=self.float_dtype, device=self.device)
-        
-        n_profile = torch.zeros_like(self.R)
-        # mask = self.R <= self.fiber_radius
-        # n_profile[mask] = self.n_core * torch.sqrt(1 - 2 * delta_tensor * (self.R[mask] / self.fiber_radius)**2)
-        # n_profile[~mask] = self.n_core * torch.sqrt(1 - 2 * delta_tensor)
-        n_profile[torch.where(self.R > self.fiber_radius)] = self.n_clad
-        n_profile[torch.where(self.R <= self.fiber_radius)] = self.n_core * torch.sqrt(1 - 2 * delta * (self.R[torch.where(self.R <= self.fiber_radius)]/self.fiber_radius)**2) 
-        # Delta = (self.n_core - self.n_clad) / self.n_core
-        # 굴절률 차이
-        self.delta_n = n_profile - self.n_clad
-        
-        kz = ((self.k0 * self.n_clad)**2 - self.KX**2 - self.KY**2).to(self.dtype)
-        kz = torch.sqrt(kz)
-        self.diffraction_op = torch.exp(1j * kz  * self.dz / 2)
-
-        # 회절 연산자 (주파수 영역)
-        # self.diffraction_op = torch.exp(-1j * self.KR2 * self.dz / 2 / (2 * self.k0 * self.n_clad)).to(self.dtype)
-        
-        # 굴절 연산자 (공간 영역)
-        kin = self.k0 * (n_profile - self.n_clad)
-        self.refraction_op = torch.exp(1j * kin * self.dz).to(self.dtype)
-    
-    def initialize_amplitude(self, total_power=1.0):
-        """
-        가우시안 진폭 초기화 (전체 파워에 맞게 정규화)
-        
-        Parameters:
-        -----------
-        total_power : float
-            입력 빔의 총 파워 (W)
-        """
-        # 가우시안 빔 진폭 계산
-        self.amplitude = torch.exp(-(self.R**2) / (2 * self.input_radius**2))
-        # self.amplitude = torch.exp(-(self.R**2) / (1 * self.input_radius**2))
-        
-        # 현재 총 파워 계산 (강도의 적분)
-        dx = self.domain_size / self.N
-        current_power = torch.sum(torch.abs(self.amplitude)**2) * dx**2
-        
-        # 원하는 총 파워로 정규화 
-        self.amplitude = self.amplitude * torch.sqrt(total_power / current_power)
-        
-        # 확인: 정규화 후 총 파워 계산
-        normalized_power = torch.sum(torch.abs(self.amplitude)**2)
-        print(f"Total input power: {normalized_power.item():.6f} W")
-    
-    def create_phase_map(self, phases):
-        """
-        16x16 매크로픽셀을 사용하여 위상 맵 생성
-        """
-        # 위상 맵 초기화
-        phase_map = torch.zeros_like(self.R)
-        
-        # 코어 영역 정의 (중앙 128x128)
-        N_phase = phase_map.shape[0]
-        N_phase_half = N_phase // 2
-        core_start = (self.N - N_phase_half) // 2
-        core_end = core_start + N_phase_half
-        
-        # 매크로픽셀 크기 계산 (코어 영역을 16x16 매크로픽셀로 나눔)
-        macropixel_size = N_phase_half // 16  # 각 매크로픽셀은 8x8 그리드 포인트로 구성
-        
-        # phases가 1차원이라면 16x16으로 변환
-        if phases.dim() == 1:
-            phases = phases.reshape(16, 16)
-        
-        # 각 매크로픽셀에 해당하는 위상 적용
-        for i in range(16):
-            for j in range(16):
-                # 매크로픽셀의 그리드 범위 계산
-                row_start = core_start + i * macropixel_size
-                row_end = row_start + macropixel_size
-                col_start = core_start + j * macropixel_size
-                col_end = col_start + macropixel_size
-                
-                # 해당 영역에 위상 적용
-                phase_map[row_start:row_end, col_start:col_end] = phases[i, j]
-        
-        return phase_map
 
     def apply_nonlinearity(self, field):
         """비선형 효과와 굴절을 한 번에 적용"""
@@ -168,9 +35,6 @@ class FiberPropagationModel:
         return field * torch.exp(1j * nonlinear_phase) * self.refraction_op
 
     def propagate_one_step(self, E_real,):
-        
- 
-
         """한 스텝 빔 전파"""
         # 회절 단계
         E_fft = torch.fft.fft2(E_real)
@@ -439,11 +303,16 @@ class FiberPropagationModel:
         plt.tight_layout()
         plt.show()
     
-
-
 wvl = 1064e-9  # 파장 (m)
 k0 = 2 * np.pi / wvl  # 파수 (m^-1)
-gamma = 2.3e-20*k0
+gamma = 2.3e-20 * k0
+num_iters=2
+
+
+optimize(num_iters=num_iters, learning_rate=0.1
+         use_checkpoint=True,
+         target_field=target_field)
+
 # 모델 초기화
 model = FiberPropagationModel(
     n_core=1.47,

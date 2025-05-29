@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from src.util import make_3d_animation
+from src.util import plot_3d_profile
 import os
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -38,4 +38,5 @@ y_window = fiber_index_ds.shape[1] // 4
 fiber_index_ds = fiber_index_ds[(fiber_index_ds.shape[0]//2 - x_window):(fiber_index_ds.shape[0]//2 + x_window), (fiber_index_ds.shape[1]//2 - y_window):(fiber_index_ds.shape[1]//2 + y_window)]
 
 animation_filename = f'256pixel_{waveguide_type}_{input_type}_{position}_{radius}_{input_radius}_{int(power)}'
-make_3d_animation(fields, indices=fiber_index_ds, radius=radius, filename=animation_filename, extent=extent, interpolation="bilinear")
+plot_3d_profile(fields, indices=fiber_index_ds, radius=radius, filename=animation_filename, extent=extent, interpolation="bilinear")
+plt.show()

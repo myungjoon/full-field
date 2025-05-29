@@ -5,6 +5,18 @@ import mmfsim.grid as grids
 from mmfsim.fiber import GrinFiber
 from mmfsim.modes import GrinLPMode
 
+def calculate_mode_field(grid, grin_fiber, n, device='cpu'):
+    l, m, k = n_to_lm(n)
+
+    mode = GrinLPMode(l, m)
+    mode.compute(grin_fiber, grid)
+    mode_field = torch.tensor(mode._fields[:, :, k])
+
+    return mode_field.to(device)
+
+
+
+
 def n_to_lm(n):
     """
     Convert mode index n to (l,m) pair according to GRIN fiber LP mode indexing.
@@ -16,9 +28,9 @@ def n_to_lm(n):
     
     Examples:
     n=1 -> (0,1)
-    n=2 -> (0,2)
-    n=3 -> (1,1)
-    n=4 -> (0,3)
+    n=2 -> (1,1)a
+    n=3 -> (1,1)b
+    n=4 -> (0,2)
     n=5 -> (1,2)
     n=6 -> (2,1)
     n=7 -> (0,4)
@@ -27,31 +39,89 @@ def n_to_lm(n):
     n=10 -> (3,1)
     etc.
     """
-    if n < 1:
+    if n < 0:
         raise ValueError("Mode index n must be a positive integer")
     
-    # Start from group 1 (which has l+m=1)
-    group_sum = 1
-    count = 0
+    manual_lm_pairs = [
+        # Mode Group 1 (N=1): 1개
+        (0,1,0),  # LP01
+        
+        # Mode Group 2 (N=2): 2개  
+        (1,1,0),  # LP11a
+        (1,1,1),  # LP11b
+        
+        # Mode Group 3 (N=3): 3개
+        (0,2,0),  # LP02
+        (2,1,0),  # LP21a
+        (2,1,1),  # LP21b
+        
+        # Mode Group 4 (N=4): 4개
+        (1,2,0),  # LP12a
+        (1,2,1),  # LP12b
+        (3,1,0),  # LP31a
+        (3,1,1),  # LP31b
+        
+        # Mode Group 5 (N=5): 5개
+        (0,3,0),  # LP03
+        (2,2,0),  # LP22a
+        (2,2,1),  # LP22b
+        (4,1,0),  # LP41a
+        (4,1,1),  # LP41b
+        
+        # Mode Group 6 (N=6): 6개
+        (1,3,0),  # LP13a
+        (1,3,1),  # LP13b
+        (3,2,0),  # LP32a
+        (3,2,1),  # LP32b
+        (5,1,0),  # LP51a
+        (5,1,1),  # LP51b
+        
+        # Mode Group 7 (N=7): 7개
+        (0,4,0),  # LP04
+        (2,3,0),  # LP23a
+        (2,3,1),  # LP23b
+        (4,2,0),  # LP42a
+        (4,2,1),  # LP42b
+        (6,1,0),  # LP61a
+        (6,1,1),  # LP61b
+        
+        # Mode Group 8 (N=8): 8개
+        (1,4,0),  # LP14a
+        (1,4,1),  # LP14b
+        (3,3,0),  # LP33a
+        (3,3,1),  # LP33b
+        (5,2,0),  # LP52a
+        (5,2,1),  # LP52b
+        (7,1,0),  # LP71a
+        (7,1,1),  # LP71b
+    ]
+
+    return manual_lm_pairs[n]  # n starts from 1, so we use n-1 for 0-indexing
+
+
+
+    # # Start from group 1 (which has l+m=1)
+    # group_sum = 1
+    # count = 0
     
-    while True:
-        # Number of (l,m) pairs in current group where l+m=group_sum
-        group_size = group_sum
+    # while True:
+    #     # Number of (l,m) pairs in current group where l+m=group_sum
+    #     group_size = group_sum
         
-        # If n is in the current group
-        if count + group_size >= n:
-            # Calculate position within group (0-indexed)
-            pos_in_group = n - count - 1
+    #     # If n is in the current group
+    #     if count + group_size >= n:
+    #         # Calculate position within group (0-indexed)
+    #         pos_in_group = n - count - 1
             
-            # For group with sum=group_sum, l goes from 0 to group_sum-1
-            l = pos_in_group
-            m = group_sum - l
+    #         # For group with sum=group_sum, l goes from 0 to group_sum-1
+    #         l = pos_in_group
+    #         m = group_sum - l
             
-            return (l, m)
+    #         return (l, m)
         
-        # Move to next group
-        count += group_size
-        group_sum += 1
+    #     # Move to next group
+    #     count += group_size
+    #     group_sum += 1
 
 class Mode:
     def __init__(self, domain, fiber, input_beam, l=0, m=0, device='cpu'):
@@ -82,41 +152,32 @@ class Mode:
         field = field # / torch.sqrt(summation)
         return field.to(self.device)
 
+def calculate_mode_area(domain, fiber, mode=0, device='cpu'):
+    return 1.0
 
+def calculate_modes(domain, fiber, input, num_modes=10, device='cpu'):
+    grid = grids.Grid(pixel_size=domain.Lx/domain.Nx, pixel_numbers=(domain.Nx, domain.Ny))
+    grin_fiber = GrinFiber(radius=fiber.radius, wavelength=input.wvl0, n1=fiber.n_core, n2=fiber.n_clad)
 
-def calculate_modes(domain, fiber, beam, num_modes=10, device='cpu'):
-    modes = []
+    modes = torch.zeros((num_modes, domain.Nx, domain.Ny), device=device)
     for n in range(num_modes):
-        l, m = n_to_lm(n+1)
-        mode = Mode(domain, fiber, beam, l, m, device).calculate_field()
-        modes.append(mode)
-
+        l, m, k = n_to_lm(n)
+        
+        mode = GrinLPMode(l, m)
+        mode.compute(grin_fiber, grid)
+        field = torch.tensor(mode._fields[:, :, k]).to(device)
+        modes[n] = field
     return modes
 
-def decompose_modes(field, modes, num_modes=10, dtype='real'):
+def decompose_modes(field, modes, num_modes=10,):
     # Decompose the input beam into the modes of the fiber
-    if dtype == 'real':
-        coefficients = np.zeros((num_modes,2), dtype=float)
-    elif dtype == 'complex':
-        coefficients = np.zeros((num_modes,2), dtype=complex)
-    else:
-        raise ValueError('Invalid dtype')
-    
+    coefficients = torch.zeros(num_modes, dtype=torch.complex64)
+
     for n in range(num_modes):
-        l, m = n_to_lm(n+1)
-        
-        if l == 0:
-            overlap_0 = torch.sum(modes[n][:, :, 0] * field.conj())
-            overlap_1 = torch.tensor(0.)
-        else:
-            overlap_0 = torch.sum(modes[n][:, :, 0] * field.conj())
-            overlap_1 = torch.sum(modes[n][:, :, 1] * field.conj())
-        
-        if dtype == 'real':
-            coefficients[n, 0] = torch.abs(overlap_0)
-            coefficients[n, 1] = torch.abs(overlap_1)
-        elif dtype == 'complex':
-            coefficients[n, 0] = overlap_0
-            coefficients[n, 1] = overlap_1
+        overlap = torch.sum(modes[n] * field.conj())    
+        coefficients[n] = overlap
+
+    # normalize coefficients of tensor coefficients
+    coefficients = coefficients / torch.norm(coefficients)
 
     return coefficients
