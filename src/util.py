@@ -120,8 +120,8 @@ def plot_beam_intensity_and_phase(field, indices=None, extent=None, interpolatio
         im = ax[0].imshow(np.abs(field)**2, cmap='turbo',)
     ax[0].set_xticks(xtick)
     ax[0].set_yticks(ytick)
-    ax[0].set_xticklabels([f'{x}' for x in xlabel])
-    ax[0].set_yticklabels([f'{y}' for y in ylabel])
+    ax[0].set_xticklabels([f'{x:.1f}' for x in xlabel])
+    ax[0].set_yticklabels([f'{y:.1f}' for y in ylabel])
 
     ax[0].set_xlabel(r'x ($\mu m$)')
     ax[0].set_ylabel(r'y ($\mu m$)')
@@ -141,8 +141,8 @@ def plot_beam_intensity_and_phase(field, indices=None, extent=None, interpolatio
         
     ax[1].set_xticks(xtick)
     ax[1].set_yticks(ytick)
-    ax[1].set_xticklabels([f'{x}' for x in xlabel])
-    ax[1].set_yticklabels([f'{y}' for y in ylabel])
+    ax[1].set_xticklabels([f'{x:.1f}' for x in xlabel])
+    ax[1].set_yticklabels([f'{y:.1f}' for y in ylabel])
 
     ax[1].set_xlabel(r'x ($\mu m$)')
     ax[1].set_ylabel(r'y ($\mu m$)')
@@ -311,16 +311,19 @@ def print_total_power(domain, field):
     Print the total power of the field.
     """
     # Calculate the total power
-    total_power = np.sum(np.abs(field)**2) * domain.dx * domain.dy
+    dx = domain.Lx / domain.Nx
+    dy = domain.Ly / domain.Ny
+    total_power = np.sum(np.abs(field)**2) * dx * dy
     print(f'Total power: {total_power:.4f} W')
 
-def make_3d_animation(fields, radius=10, filename=None, extent=None, interpolation=None):
+def make_3d_animation(fields, radius=10, propagation_length=100, filename=None, extent=None, interpolation=None):
     intensities = np.abs(fields)**2
 
     if not os.path.exists('frames'):
         os.makedirs('frames')
 
     num_frames = intensities.shape[0]
+    unit_propagation_length = propagation_length / num_frames
     plt.figure()
     for i in range(num_frames):
 
@@ -344,8 +347,10 @@ def make_3d_animation(fields, radius=10, filename=None, extent=None, interpolati
         fiber = Circle((0, 0), radius, fill=False, linestyle='--', edgecolor='white', linewidth=2.0)
         ax.add_patch(fiber)
         
+          # Convert to cm if needed
+
         # At each frame, place text at the top right corner with the current propagation distance dz*i
-        current_z = i * 0.1  # Adjust this value based on your simulation parameters
+        current_z = i * unit_propagation_length  # Adjust this value based on your simulation parameters
         ax.text(0.98, 0.98, f'z = {current_z:.2f} cm', transform=ax.transAxes, ha='right', va='top', fontsize=15, color='white')
         # Save frame
         plt.savefig(f'frames/frame_{i:03d}.png')

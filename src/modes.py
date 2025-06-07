@@ -15,6 +15,13 @@ def calculate_mode_field(grid, grin_fiber, n, device='cpu'):
     return mode_field.to(device)
 
 
+def calculate_effective_mode_area(mode_field, dx, dy):
+    dA = dx * dy  # Area of a pixel
+    integral_E2 = np.sum(np.abs(mode_field)**2) * dA
+    integral_E4 = np.sum(np.abs(mode_field)**4) * dA
+
+    A_eff = (integral_E2**2) / integral_E4 
+    return A_eff
 
 
 def n_to_lm(n):
@@ -178,6 +185,6 @@ def decompose_modes(field, modes, num_modes=10,):
         coefficients[n] = overlap
 
     # normalize coefficients of tensor coefficients
-    coefficients = coefficients / torch.norm(coefficients)
+    # coefficients = coefficients / torch.norm(coefficients)
 
     return coefficients

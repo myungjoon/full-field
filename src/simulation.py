@@ -8,7 +8,7 @@ from .modes import calculate_modes, decompose_modes, n_to_lm, calculate_mode_fie
 from tqdm import tqdm
 
 class Domain:
-    def __init__(self, Lx, Ly, Nx, Ny, precision='double', device='cpu'):
+    def __init__(self, Lx, Ly, Nx, Ny, precision='single', device='cpu'):
         self.Lx = Lx
         self.Ly = Ly
         self.Nx = Nx
@@ -40,17 +40,29 @@ class Domain:
         return KX, KY
 
 
+class KerrMedium:
+    def __init__(self, domain, n0, n2, precision='single', device='cpu'):
+        self.domain = domain
+        self.n0 = n0
+        self.n2 = n2
+
+        if precision == 'double':
+            self.real_dtype = torch.float64
+            self.complex_dtype = torch.complex128
+        elif precision == 'single':
+            self.real_dtype = torch.float32
+            self.complex_dtype = torch.complex64
+
+        self.device = device
+        self.n = torch.fill(self.domain.X, self.n0).to(self.device)
+
 class Fiber:
-    def __init__(self, domain, n_core, n_clad, total_z, dz, radius=5e-6, n2=0, 
-                 structure_type="GRIN", disorder=False, precision='double', device='cpu'):
+    def __init__(self, domain, n_core, n_clad, radius=5e-6, n2=0, 
+                 structure_type="GRIN", disorder=False, precision='single', device='cpu'):
         self.domain = domain
         self.n_core = n_core
         self.n_clad = n_clad
         self.radius = radius
-        
-        self.total_z = total_z
-        self.dz = dz
-        self.n_step = int(total_z / dz)
         self.n2 = n2
 
         if precision == 'double':
@@ -64,57 +76,10 @@ class Fiber:
 
         if structure_type == "GRIN":
             self.n = self.GRIN_fiber(disorder)
-        elif structure_type == "homogeneous":
-            self.n = self.homogeneous_fiber()
-    
-    def homogeneous_fiber(self,):
-        n = torch.fill(self.domain.X, self.n_clad)
-        return n.to(self.device)
-
-
-    # def GRIN_fiber(self, disorder=False):
-    #     n = torch.zeros_like(self.domain.X)
-        
-    #     if disorder:
-    #         # Elliptical deformation parameters
-    #         max_excursion = 5e-6  # 2 µm maximum excursion
-        
-    #         # 2D case - single random angle
-    #         theta = np.random.random() * 2 * np.pi
-        
-    #         # Random ellipticity (semi-major and semi-minor axes)
-    #         # Ensure the deformation doesn't exceed max_excursion
-    #         a = self.radius + (np.random.random() - 0.5) * 2 * max_excursion
-    #         b = self.radius + (np.random.random() - 0.5) * 2 * max_excursion
-            
-    #         # Apply rotation to coordinates
-    #         X_rot = self.domain.X * np.cos(theta) - self.domain.Y * np.sin(theta)
-    #         Y_rot = self.domain.X * np.sin(theta) + self.domain.Y * np.cos(theta)
-            
-    #         # Elliptical radius calculation
-    #         R_elliptical = torch.sqrt((X_rot/a)**2 + (Y_rot/b)**2)
-            
-    #         # For coarse pitch variation along fiber length (if you have Z dimension)
-    #         # This part would need adjustment based on your domain structure
-    #         # For 2D case, we'll use a simplified approach
-            
-    #         core_mask = R_elliptical <= 1.0
-    #         clad_mask = R_elliptical > 1.0
-    #     else:
-    #         # Original circular geometry
-    #         R = torch.sqrt(self.domain.X**2 + self.domain.Y**2)
-    #         core_mask = R <= self.radius
-    #         clad_mask = R > self.radius
-    #         R_elliptical = R / self.radius  # Normalized radius for GRIN calculation
-        
-    #     # Calculate delta
-    #     delta = (self.n_core**2 - self.n_clad**2) / (2 * self.n_core**2)
-        
-    #     # Assign refractive indices
-    #     n[clad_mask] = self.n_clad
-    #     n[core_mask] = self.n_core * torch.sqrt(1 - 2 * delta * R_elliptical[core_mask]**2)
-        
-    #     return n.to(self.device)
+        elif structure_type in ("step", "step_index"):
+            raise NotImplementedError("Step index fiber is not implemented yet.")
+        else:
+            raise ValueError("Invalid structure type. Choose 'GRIN' or 'step_index'.")
 
     def GRIN_fiber(self, disorder=False):
         n = torch.zeros_like(self.domain.X)
@@ -133,7 +98,7 @@ class Fiber:
         return n.to(self.device)
 
 class Input:
-    def __init__(self, domain, wvl0, n_core, n_clad, type="gaussian", beam_radius=50e-6, fiber_radius=0., num_modes=0,
+    def __init__(self, domain, wvl0, n_core, n_clad, input_type="gaussian", beam_radius=50e-6, fiber_radius=0., num_modes=0,
                  power=1.0, phase_modulation=False, pixels=(32, 32), in_phase=False, scale=1.0, cx=0, cy=0, l=0, m=1, precision='single', device='cpu'):
         
         self.domain = domain
@@ -151,16 +116,16 @@ class Input:
             self.real_dtype = torch.float32
             self.complex_dtype = torch.complex64
 
-        if type=="gaussian":
+        if input_type=="gaussian":
             self.field = self.gaussian_beam(beam_radius, cx=cx, cy=cy, phase_modulation=phase_modulation, pixels=pixels)
-        elif type=="mode":
+        elif input_type=="mode":
             self.field = self.mode_mixing(num_modes, cx=cx, cy=cy, scale=scale, in_phase=in_phase)
-        elif type=="speckle":
+        elif input_type=="speckle":
             self.field = self.speckle_beam(cx=cx, cy=cy, pixels=pixels)
-        elif type=="single mode":
-            self.field = self.LP_modes(l, m)
+        elif input_type=="fundamental":
+            self.field = self.LP_modes(0, 1)
         else:
-            raise ValueError('Invalid Type')
+            raise ValueError('Invalid Input Type')
 
     def speckle_beam(self, cx=0, cy=0, pixels=(32, 32)):
         # Generate a random phase map
@@ -218,18 +183,24 @@ class Input:
         field = field * torch.exp(1j * phase_map)
 
     def LP_modes(self, l, m,):
+        epsilon = 1e-30
         grid = grids.Grid(pixel_size=self.domain.Lx/self.domain.Nx, pixel_numbers=(self.domain.Nx, self.domain.Ny))
         grin_fiber = GrinFiber(radius=self.fiber_radius, wavelength=self.wvl0, n1=self.n_core, n2=self.n_clad)
         mode = GrinLPMode(l, m)
         mode.compute(grin_fiber, grid)
         field = torch.tensor(mode._fields[:, :, 0])
+        # field += epsilon
         field = field.to(self.device)
+        dx = self.domain.Lx / self.domain.Nx
+        dy = self.domain.Ly / self.domain.Ny
+        field = normalize_field_to_power(field, dx, dy, self.power)
+
         # Calculate the propagation constant for the mode
         k0 = 2 * np.pi / self.wvl0
         Delta = (self.n_core - self.n_clad) / self.n_core
         # beta = self.n_core * k0 * np.sqrt(1 - 2 * (2*m + l - 1) * np.sqrt(2*Delta) / self.n_core / k0 / self.fiber_radius)
 
-        # field = normalize_field_to_power(field, self.domain.X, self.domain.Y, self.power)
+        
         return field.to(self.device)
 
     def mode_mixing(self, num_mode, coefficients=None, cx=0, cy=0, scale=1.0, in_phase=False):
@@ -241,17 +212,13 @@ class Input:
         if coefficients is None:
             if in_phase:
                 theta = np.zeros(num_mode)
+                amp = np.random.uniform(0, 1, num_mode)
             else:
                 theta = np.random.uniform(0, 2*np.pi, num_mode)
-            amp = np.random.uniform(0, 1, num_mode)
+                amp = np.ones(num_mode)
             coefficients = amp * np.exp(1j * theta)
         for n in range(num_mode):            
             mode_field = calculate_mode_field(grid, grin_fiber, n)
-            # mode = GrinLPMode(l, m)
-            # mode.compute(grin_fiber, grid)
-            
-                # field = torch.tensor(mode._fields[:, :, 0]) # / torch.sqrt(summation) 
-                # total_field += field * coefficients[n, 0]
             total_field += (coefficients[n] * mode_field)
         
         dx = self.domain.Lx / self.domain.Nx
@@ -260,47 +227,40 @@ class Input:
         total_field = normalize_field_to_power(total_field.to(self.device), dx, dy, self.power)
         total_field = torch.roll(total_field, shifts=(int(cx/dx), int(cy/dy)), dims=(0, 1))
 
-        
-
         return total_field.to(self.device)
 
 
 def scale_field(input_field, scale_factor):
-    # 디바이스 및 dtype 보존
     device = input_field.device
     dtype = input_field.dtype
     
-    # 중심점 계산
-    center = 2048.0  # 4096 / 2
+    size = input_field.shape[0]
+
+    center = size / 2.0
     
-    # 새로운 좌표 그리드 생성
     y_coords = torch.arange(4096, device=device, dtype=torch.float32)
     x_coords = torch.arange(4096, device=device, dtype=torch.float32)
     y_grid, x_grid = torch.meshgrid(y_coords, x_coords, indexing='ij')
     
-    # 중심을 기준으로 좌표를 스케일링
-    # 원래 좌표 = (새 좌표 - 중심) / 배율 + 중심
+
     orig_y = (y_grid - center) / scale_factor + center
     orig_x = (x_grid - center) / scale_factor + center
     
-    # 유효한 범위 내의 좌표만 선택
+
     valid_mask = ((orig_y >= 0) & (orig_y < 4096) & 
                   (orig_x >= 0) & (orig_x < 4096))
     
-    # 결과 텐서 초기화
     scaled_field = torch.zeros((4096, 4096), device=device, dtype=dtype)
     
-    # 이중선형 보간을 사용한 값 할당
+    # interpolation
     y_floor = torch.floor(orig_y[valid_mask]).long()
     x_floor = torch.floor(orig_x[valid_mask]).long()
     y_ceil = torch.clamp(y_floor + 1, max=4095)
     x_ceil = torch.clamp(x_floor + 1, max=4095)
     
-    # 보간 가중치 계산
     dy = orig_y[valid_mask] - y_floor.float()
     dx = orig_x[valid_mask] - x_floor.float()
     
-    # 이중선형 보간
     scaled_field[valid_mask] = (
         input_field[y_floor, x_floor] * (1 - dx) * (1 - dy) +
         input_field[y_floor, x_ceil] * dx * (1 - dy) +
@@ -312,17 +272,6 @@ def scale_field(input_field, scale_factor):
 
 
 def normalize_field_to_power(E_field, dx, dy, P_target):
-    """
-    Normalize the input field to have total power = P_target.
-
-    Parameters:
-        E_field : np.ndarray (complex) - 2D complex field E(x, y)
-        dX, dY  : float - scalar grid spacing in x and y
-        P_target: float - desired total power
-
-    Returns:
-        E_normalized : np.ndarray (complex) - normalized field
-    """
     dA = dx * dy
     intensity = torch.abs(E_field)**2
     P_current = torch.sum(intensity) * dA
@@ -330,8 +279,18 @@ def normalize_field_to_power(E_field, dx, dy, P_target):
     return E_field * scale
 
 
+def calculate_effective_mode_area(mode_field, dx, dy):
+    dA = dx * dy  # Area of a pixel
+    integral_E2 = torch.sum(torch.abs(mode_field)**2) * dA
+    integral_E4 = torch.sum(torch.abs(mode_field)**4) * dA
+
+    A_eff = (integral_E2**2) / integral_E4 
+    return A_eff
+
     
-def run(domain, input, fiber, wvl0,  dz=1e-06, num_field_sample=100, num_mode_sample=500, precision='double', ds_factor=1, disorder=False):
+def run(domain, input, fiber, wvl0,  dz=1e-06, num_field_sample=100, 
+        num_mode_sample=500, precision='single', 
+        ds_factor=1, disorder=False, calculate_nl_phase=False):
     # device check
     input_device = input.device
     fiber_device = fiber.device
@@ -376,6 +335,10 @@ def run(domain, input, fiber, wvl0,  dz=1e-06, num_field_sample=100, num_mode_sa
     X = domain.X = domain.X.to(device)
     Y = domain.Y = domain.Y.to(device)
 
+    dx = domain.Lx / domain.Nx
+    dy = domain.Ly / domain.Ny
+    dA = dx * dy
+
     absorption = torch.exp(-2*((torch.sqrt(X**2+Y**2)/(fiber.radius*1.5))**10))
     absorption = absorption.to(device)
 
@@ -390,6 +353,7 @@ def run(domain, input, fiber, wvl0,  dz=1e-06, num_field_sample=100, num_mode_sa
     cnt_mode = 0
     cnt_perturbation = 0
     E_real = input.field
+
     for i in tqdm(range(n_step), desc="Simulating propagation"):
         if disorder and ((i+1)*dz > L_perturbation * cnt_perturbation):
             fiber.n = fiber.GRIN_fiber(disorder)
@@ -420,7 +384,13 @@ def run(domain, input, fiber, wvl0,  dz=1e-06, num_field_sample=100, num_mode_sa
         E_real = torch.fft.ifft2(E_fft)
         E_real = E_real * absorption
 
-        # nl_phase = nl_phase + torch.sum(Knl) * dz
+        if calculate_nl_phase:
+            # A_sim = fiber.radius**2 * np.pi
+
+            A_eff = calculate_effective_mode_area(E_real, dx, dy)
+            total_power = torch.sum(torch.abs(E_real)**2) * dx * dy
+            nl_phase = nl_phase + k0 * fiber.n2 * total_power / A_eff * dz
+            
 
     energy = torch.sum(torch.abs(E_real)**2)
     energy_arr[cnt] = energy.item()
@@ -428,4 +398,7 @@ def run(domain, input, fiber, wvl0,  dz=1e-06, num_field_sample=100, num_mode_sa
     # if mode_decompose:
     #     return modes_arr, field_arr, energy_arr
     # else:
-    return field_arr, energy_arr, modes_arr
+    if calculate_nl_phase:
+        return field_arr, energy_arr, modes_arr, nl_phase
+    else:
+        return field_arr, energy_arr, modes_arr
