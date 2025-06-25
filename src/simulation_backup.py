@@ -146,7 +146,7 @@ class Input:
         core_start = N_half // 2
         
         # macropixel size
-        macropixel_size = N_half // N_pixel 
+        macropixel_size = N_half // N_pixel  # 각 매크로픽셀은 8x8 그리드 포인트로 구성
         
         if phases is None:
             phases = torch.rand(N_pixel, N_pixel) *  2 * np.pi
@@ -162,18 +162,16 @@ class Input:
         
         return phase_map
 
-    def gaussian_beam(self, w, cx=0, cy=0, phase_modulation=False, pixels=None,):
+    def gaussian_beam(self, w, cx=0, cy=0, phase_modulation=False, pixels=None, phases=None):
         R = torch.sqrt((self.domain.X-cx)**2 + (self.domain.Y-cy)**2)
-        field = torch.exp(-R**2 / (w**2))
+        field = torch.exp(-R**2 / (2*w**2))
 
         if phase_modulation:
             phase_map = self.create_phase_map(pixels)
-            phase_map = torch.exp(1j * phase_map)
-            phase_map_fft = torch.fft.fftshift(torch.fft.fft2(phase_map))
             # translate the phase map to the center of the beam with cx and cy
             # phase_map = torch.roll(phase_map, shifts=(int(cx/self.domain.Lx * self.domain.Nx), int(cy/self.domain.Ly * self.domain.Ny)), dims=(0, 1))
             # field = field * torch.exp(1j * 1.0 * np.pi * torch.rand_like(field))
-            field = field * phase_map_fft
+            field = field * torch.exp(1j * phase_map)
 
         dx = self.domain.Lx / self.domain.Nx
         dy = self.domain.Ly / self.domain.Ny
@@ -322,6 +320,7 @@ def run(domain, medium, input, boundary="periodic", dz=1e-06, num_field_sample=1
     KZ = torch.sqrt(kz)
     Kin = k0 * (medium.n - medium.n0)
     
+
     n_step = int(domain.total_z / dz)
 
     L_perturbation = domain.total_z / 100
@@ -379,8 +378,7 @@ def run(domain, medium, input, boundary="periodic", dz=1e-06, num_field_sample=1
         #     cnt_perturbation += 1
 
         # Trajectory tracking for off-axis input beams
-        max_trajectory[i,0], max_trajectory[i, 1] = torch.unravel_index(torch.argmax(torch.abs(E_real)), E_shape)
-        # Knl = medium.n2 * k0 * torch.abs(E_real)**2
+        # max_trajectory[i,0], max_trajectory[i, 1] = torch.unravel_index(torch.argmax(torch.abs(E_real)), E_shape)
 
         if trace_modes and (i % mode_sample_interval == 0) and cnt_mode < num_mode_sample:
             coefficients = decompose_modes(E_real, modes, max_mode_num)
@@ -395,15 +393,15 @@ def run(domain, medium, input, boundary="periodic", dz=1e-06, num_field_sample=1
             cnt += 1
         
         E_fft = torch.fft.fft2(E_real)
-        E_fft = E_fft * torch.exp(1j  * KZ * dz/2)
+        E_fft = E_fft * torch.exp(1j  * KZ * dz)
         E_real = torch.fft.ifft2(E_fft)
 
         Knl = medium.n2 * k0 * torch.abs(E_real)**2
         E_real = E_real * torch.exp(1j * (Kin + Knl) * dz)
 
-        E_fft = torch.fft.fft2(E_real)
-        E_fft = E_fft * torch.exp(1j  * KZ * dz/2)
-        E_real = torch.fft.ifft2(E_fft)
+        # E_fft = torch.fft.fft2(E_real)
+        # E_fft = E_fft * torch.exp(1j  * KZ * dz/2)
+        # E_real = torch.fft.ifft2(E_fft)
         E_real = E_real * boundary
 
         if calculate_nl_phase:
@@ -420,8 +418,8 @@ def run(domain, medium, input, boundary="periodic", dz=1e-06, num_field_sample=1
         if trace_modes:
             return field_arr, energy_arr, modes_arr, nl_phase
         else:
-            return field_arr, energy_arr, nl_phase, max_trajectory
-            # return field_arr, energy_arr, nl_phase,
+            # return field_arr, energy_arr, nl_phase, max_trajectory
+            return field_arr, energy_arr, nl_phase,
     else:
         if trace_modes:
             return field_arr, energy_arr, modes_arr

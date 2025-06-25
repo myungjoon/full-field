@@ -164,7 +164,7 @@ def calculate_mode_area(domain, fiber, mode=0, device='cpu'):
 
 def calculate_modes(domain, fiber, input, num_modes=10, device='cpu'):
     grid = grids.Grid(pixel_size=domain.Lx/domain.Nx, pixel_numbers=(domain.Nx, domain.Ny))
-    grin_fiber = GrinFiber(radius=fiber.radius, wavelength=input.wvl0, n1=fiber.n_core, n2=fiber.n_clad)
+    grin_fiber = GrinFiber(radius=fiber.radius, wavelength=input.wvl0, n1=fiber.nc, n2=fiber.n0)
 
     modes = torch.zeros((num_modes, domain.Nx, domain.Ny), device=device)
     for n in range(num_modes):

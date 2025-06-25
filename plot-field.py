@@ -1,32 +1,38 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-   
-data = np.load('fields_rod_off_power_1600000.0.npy')
-output = np.load('output_rod_off_power_1600000.0.npy')
-Knls = np.load('Knls_rod_off_power_1600000.0.npy')
-Kins = np.load('Kins_rod_off_power_1600000.0.npy')
-
-
-print(data.shape)
-
-def plot_field_intensity(field, indices=None, interpolation="bilinear"):
+def plot_nl_phase(nl_phase, interpolation="bilinear"):
     plt.figure()
-    plt.imshow(np.abs(field**2), cmap='turbo', interpolation=interpolation)
-    if indices is not None:
-        plt.imshow(indices, cmap='gray', alpha=0.5, interpolation=interpolation)
+    plt.imshow(nl_phase, cmap='turbo', interpolation=interpolation)
     plt.colorbar()
 
-plt.figure()
-plt.plot(np.abs(Knls), label='Knls')
-plt.plot(np.abs(Kins), label='Kins')
-plt.title('Knls vs. Kins')
-plt.legend()
+position = 'on'
 
-plot_field_intensity(data[0, :, :], indices=None, interpolation="bilinear")
-plot_field_intensity(data[-1, :, :], indices=None, interpolation="bilinear")
-plot_field_intensity(data[-2, :, :], indices=None, interpolation="bilinear")
-plot_field_intensity(data[-3, :, :], indices=None, interpolation="bilinear")
+phases_scale_1 = np.load(f'./nl_phase_mode_6_{position}_160000_1.0_35.npy')
+phases_scale_2 = np.load(f'./nl_phase_mode_6_{position}_160000_2.0_35.npy')
+phases_scale_4 = np.load(f'./nl_phase_mode_6_{position}_160000_4.0_35.npy')
 
-# plt.imshow(np.abs(data[-5, :, :]**2), cmap='turbo', interpolation='bilinear')
+vmax = max(np.max(phases_scale_1), np.max(phases_scale_2), np.max(phases_scale_4))
+vmin = min(np.min(phases_scale_1), np.min(phases_scale_2), np.min(phases_scale_4))
+
+# Check the integration
+print(f'summation of phases_scale_1: {np.sum(phases_scale_1)}')
+print(f'summation of phases_scale_2: {np.sum(phases_scale_2)}')
+print(f'summation of phases_scale_4: {np.sum(phases_scale_4)}')
+
+plt.figure(figsize=(15, 5))
+plt.subplot(1, 3, 1)
+plt.imshow(phases_scale_1, cmap='turbo', vmin=vmin, vmax=vmax, interpolation='bilinear')
+
+plt.subplot(1, 3, 2)
+plt.imshow(phases_scale_2, cmap='turbo', vmin=vmin, vmax=vmax, interpolation='bilinear')
+
+plt.subplot(1, 3, 3)
+plt.imshow(phases_scale_4, cmap='turbo', vmin=vmin, vmax=vmax, interpolation='bilinear')
+
+plt.colorbar()
+
+
+
+
 plt.show()

@@ -1,27 +1,30 @@
 import numpy as np
 import matplotlib.pyplot as plt
-
-fields = np.load('E_array_NL_512_512_1e-05.npy')
-
-N = 5
-a = 26e-6
-L = 160e-6
-extent = [-L/2, L/2, -L/2, L/2]
+from src.util import make_3d_animation
 
 
-theta = np.linspace(0, 2*np.pi, 100)
-x_boundary = a * np.cos(theta)
-y_boundary = a * np.sin(theta)
+input_type = 'mode'
+fiber_radius = 450e-6
+propagation_length = 1.0  # in meters
+precision = 'single'
+position = 'off2'
+num_grids = 4096
+beam_radius = 5.0e-5  # in meters
+total_power = 1600
+dz = 5e-6
 
+gaussian_trajectory = np.load(f'trajectory_{input_type}_{beam_radius}_{position}_{total_power}_{precision}_{num_grids}_{dz}.npy')
 
-fig, axes = plt.subplots(2, N, figsize=(17, 9))
+filename = f'trajectory_{input_type}_{beam_radius}_{position}_{total_power}_{precision}_{num_grids}_{dz}.npy'
+print(f'filename : {filename}')
 
-for i in range(2*N,N,-1):
-    axes[0, i-6].imshow(np.abs(fields[-1*i])**2, cmap='jet', extent=extent)
-    axes[0, i-6].plot(x_boundary, y_boundary, 'w--', linewidth=1.5)
-
-for i in range(N,0,-1):
-    axes[1, i-1].imshow(np.abs(fields[-1*i])**2, cmap='jet', extent=extent)
-    axes[1, i-1].plot(x_boundary, y_boundary, 'w--', linewidth=1.5)
-
+plt.figure(figsize=(10, 6))
+z = np.arange(gaussian_trajectory.shape[0])
+plt.plot(z, gaussian_trajectory[:, 1], c='blue', marker='o', label='Max Intensity Trajectory')
+plt.grid()
+plt.legend()
 plt.show()
+
+gaussian_fields = np.load(f'fields_{input_type}_{beam_radius}_{position}_{total_power}_{precision}_{num_grids}_{dz}.npy')
+animation_filename = f'./results/{input_type}_{beam_radius}_{position}_{total_power}_{precision}_{num_grids}_{dz}'
+make_3d_animation(gaussian_fields, radius=fiber_radius, propagation_length=propagation_length*100, filename=animation_filename, interpolation="bilinear")

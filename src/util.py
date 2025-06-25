@@ -78,12 +78,11 @@ def plot_index_profile(n):
 def plot_beam_intensity(field, indices=None, extent=None, interpolation=None):
     fig, ax = plt.subplots()
     
-    eps = 1e-5
-    extent = [-150/2, 150/2, -150/2, 150/2]
-    xtick = np.linspace(0, field.shape[1]+eps, 5)
-    ytick = np.linspace(0, field.shape[0]+eps, 5)
-    xlabel = np.linspace(extent[0], extent[1], 5)
-    ylabel = np.linspace(extent[2], extent[3], 5)
+    # extent = [-150/2, 150/2, -150/2, 150/2]
+    xtick = np.linspace(0, field.shape[1], 11)
+    ytick = np.linspace(0, field.shape[0], 11)
+    xlabel = np.linspace(extent[0], extent[1], 11)
+    ylabel = np.linspace(extent[2], extent[3], 11)
 
     if interpolation is not None:
         im = ax.imshow(np.abs(field)**2, cmap='turbo', interpolation=interpolation)
@@ -316,6 +315,128 @@ def print_total_power(domain, field):
     total_power = np.sum(np.abs(field)**2) * dx * dy
     print(f'Total power: {total_power:.4f} W')
 
+def plot_3d_profile(fields, threshold_ratio=0.95, point_size=3, 
+                   alpha=0.7, colormap='turbo', 
+                   background_color='black', figsize=(10, 8)):
+    
+    intensities = np.abs(fields)**2
+    nz, nx, ny = intensities.shape
+    
+    x_indices_list = []
+    y_indices_list = []
+    z_indices_list = []
+    intensity_values = []
+    
+    for i in range(nz):
+        threshold = threshold_ratio * np.max(intensities[i])
+        x_idx, y_idx = np.where(intensities[i] > threshold)
+        
+        if len(x_idx) > 0: 
+            z_idx = np.full_like(x_idx, i)
+            intensities_slice = intensities[i][x_idx, y_idx]
+            
+            x_indices_list.append(x_idx)
+            y_indices_list.append(y_idx)
+            z_indices_list.append(z_idx)
+            intensity_values.append(intensities_slice)
+    
+    if x_indices_list: 
+        x_indices = np.concatenate(x_indices_list)
+        y_indices = np.concatenate(y_indices_list)
+        z_indices = np.concatenate(z_indices_list)
+        all_intensities = np.concatenate(intensity_values)
+    else:
+        print("Warning: No data points above threshold found")
+        x_indices = np.array([])
+        y_indices = np.array([])
+        z_indices = np.array([])
+        all_intensities = np.array([])
+    
+  
+    R = min(nx, ny) * 0.45  # 코어 반지름
+    core_center_x = nx // 2
+    core_center_y = ny // 2
+    
+    # 그림 생성
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_subplot(111, projection='3d')
+    
+    # 배경색 설정
+    if background_color == 'black':
+        ax.xaxis.pane.fill = False
+        ax.yaxis.pane.fill = False
+        ax.zaxis.pane.fill = False
+        ax.xaxis.pane.set_edgecolor('white')
+        ax.yaxis.pane.set_edgecolor('white')
+        ax.zaxis.pane.set_edgecolor('white')
+        ax.xaxis.pane.set_alpha(0.1)
+        ax.yaxis.pane.set_alpha(0.1)
+        ax.zaxis.pane.set_alpha(0.1)
+        fig.patch.set_facecolor('black')
+        ax.set_facecolor('black')
+    
+    # 임계값 이상의 점들 플롯
+    if len(x_indices) > 0:
+        scatter = ax.scatter(x_indices, y_indices, z_indices, 
+                   color='white', s=point_size, 
+                   alpha=0.8)
+        
+        # 컬러바 추가
+        # cbar = plt.colorbar(scatter, ax=ax, shrink=0.5, aspect=20)
+        # cbar.set_label('Intensity', rotation=270, labelpad=15)
+        # if background_color == 'black':
+        #     cbar.ax.yaxis.set_tick_params(color='white')
+        #     cbar.ax.yaxis.label.set_color('white')
+    
+    theta = np.linspace(0, 2*np.pi, 100)
+    
+    z_positions = [0, nz-1]
+    for z in z_positions:
+        x_circle = core_center_x + R * np.cos(theta)
+        y_circle = core_center_y + R * np.sin(theta)
+        z_circle = np.full_like(theta, z)
+        ax.plot(x_circle, y_circle, z_circle, 'cyan', 
+                linewidth=2, alpha=alpha)
+    
+    n_vertical_lines = 2
+    for i in range(0, 100, 100//n_vertical_lines):
+        x_line = core_center_x + R * np.cos(theta[i])
+        y_line = core_center_y + R * np.sin(theta[i])
+        z_line = [0, nz-1]
+        ax.plot([x_line, x_line], [y_line, y_line], z_line, 
+                'cyan', linewidth=1.5, alpha=alpha)
+    
+
+    ax.set_xlabel('x', fontsize=12)
+    ax.set_ylabel('y', fontsize=12)
+    ax.set_zlabel('z', fontsize=12)
+    
+    ax.set_xlim(0, nx)
+    ax.set_ylim(0, ny)
+    ax.set_zlim(0, nz)
+    
+    # only show the center area of the core
+    ax.set_xlim(core_center_x - R/8, core_center_x + R/8)
+    ax.set_ylim(core_center_y - R/8, core_center_y + R/8)
+    ax.set_zlim(0, nz)
+
+    ax.grid(False)
+    
+    ax.set_box_aspect([nx/max(nx,ny,nz), ny/max(nx,ny,nz), nz/max(nx,ny,nz)])
+    
+    ax.view_init(elev=20, azim=-60)
+    
+    if background_color == 'black':
+        ax.tick_params(colors='white')
+        ax.xaxis.label.set_color('white')
+        ax.yaxis.label.set_color('white')
+        ax.zaxis.label.set_color('white')
+        ax.title.set_color('white')
+    
+    plt.tight_layout()
+    
+    return fig, ax
+
 def make_3d_animation(fields, radius=10, propagation_length=100, filename=None, extent=None, interpolation=None):
     intensities = np.abs(fields)**2
 
@@ -362,80 +483,7 @@ def make_3d_animation(fields, radius=10, propagation_length=100, filename=None, 
             image = imageio.imread(f'frames/frame_{i:03d}.png')
             writer.append_data(image)
 
-def plot_3d_profile(fields):
-    intensities = np.abs(fields)**2
-    nz, nx, ny = intensities.shape
 
-    for i in range(nz):
-        threshold = 0.7 * np.max(intensities[i])    
-        x_indices, y_indices = np.where(intensities[i] > threshold)
-        z_indices = np.full_like(x_indices, i)
-        if i == 0:
-            all_x_indices = x_indices
-            all_y_indices = y_indices
-            all_z_indices = z_indices
-        else:
-            all_x_indices = np.concatenate((all_x_indices, x_indices))
-            all_y_indices = np.concatenate((all_y_indices, y_indices))
-            all_z_indices = np.concatenate((all_z_indices, z_indices))
-
-    x_indices = all_x_indices
-    y_indices = all_y_indices
-    z_indices = all_z_indices
-
-    # Define fiber parameters
-    R = min(nx, ny) * 0.45  # Core radius (adjust as needed)
-    core_center_x = nx // 2
-    core_center_y = ny // 2
-
-    # Create figure
-    fig = plt.figure(figsize=(8, 8))
-    ax = fig.add_subplot(111, projection='3d')
-
-    # Plot only the points above threshold
-    scatter = ax.scatter(x_indices, y_indices, z_indices, c='white', s=3)
-
-    # Set labels and title
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
-
-    # Set limits
-    ax.set_xlim(0, nx)
-    ax.set_ylim(0, ny)
-    ax.set_zlim(0, nz)
-
-    # Get rid of the grid
-    ax.grid(False)
-    # Get rid of bounding box
-    ax.set_box_aspect([1, 1, 1])
-    # Make background black
-    ax.set_facecolor('black')
-
-    # Generate and plot cylindrical fiber structure
-    theta = np.linspace(0, 2*np.pi, 100)
-    z_positions = np.linspace(0, nz-1, 20)  # 20 circles along z-axis
-
-    indices = np.array([0, -1])
-    for z in z_positions[indices]:
-        x_circle = core_center_x + R * np.cos(theta)
-        y_circle = core_center_y + R * np.sin(theta)
-        z_circle = np.full_like(theta, z)
-        ax.plot(x_circle, y_circle, z_circle, 'b-', linewidth=1.5, alpha=0.7)
-
-    # Add vertical lines to connect circles and complete the cylinder visualization
-    for i in range(25, 100, 50):  # Draw 10 vertical lines around the circle
-        x_line = core_center_x + R * np.cos(theta[i])
-        y_line = core_center_y + R * np.sin(theta[i])
-        z_line = z_positions
-        ax.plot([x_line]*len(z_line), [y_line]*len(z_line), z_line, 'b-', linewidth=1, alpha=0.9)
-
-    # Fix the camera angle
-    ax.view_init(elev=-30, azim=-45)
-
-
-    # Display the plot
-    plt.tight_layout()
 
 
 def correlation(simulation, reference, dx=1e-6):
