@@ -5,9 +5,9 @@ import scipy.special as sp
 from scipy.optimize import root
 from abc import ABC, abstractmethod, abstractproperty
 
-from mmfsim.grid import Grid
-from mmfsim import matrix as matproc
-from mmfsim.plots import complex_image
+from .grid import Grid
+from .plots import complex_image
+from . import matrix as matproc
 
 
 class Fiber(ABC):

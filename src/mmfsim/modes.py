@@ -4,8 +4,8 @@ import numpy as np
 import scipy.special as sp
 import matplotlib.pyplot as plt
 
-from mmfsim.grid import Grid
-from mmfsim.fiber import GrinFiber, StepIndexFiber
+from .grid import Grid
+from .fiber import GrinFiber, StepIndexFiber
 
 lru_cache_default_size = 1024
 
