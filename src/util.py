@@ -90,8 +90,8 @@ def plot_beam_intensity(field, indices=None, extent=None, interpolation=None):
         im = ax.imshow(np.abs(field)**2, cmap='turbo',)
     ax.set_xticks(xtick)
     ax.set_yticks(ytick)
-    ax.set_xticklabels([f'{x}' for x in xlabel])
-    ax.set_yticklabels([f'{y}' for y in ylabel])
+    ax.set_xticklabels([f'{x:.0f}' for x in xlabel])
+    ax.set_yticklabels([f'{y:.0f}' for y in ylabel])
 
     ax.set_xlabel(r'x ($\mu m$)')
     ax.set_ylabel(r'y ($\mu m$)')
@@ -315,8 +315,8 @@ def print_total_power(domain, field):
     total_power = np.sum(np.abs(field)**2) * dx * dy
     print(f'Total power: {total_power:.4f} W')
 
-def plot_3d_profile(fields, threshold_ratio=0.95, point_size=3, 
-                   alpha=0.7, colormap='turbo', 
+def plot_3d_profile(fields, threshold_ratio=0.99, point_size=3, 
+                   alpha=0.9, colormap='turbo', 
                    background_color='black', figsize=(10, 8)):
     
     intensities = np.abs(fields)**2
@@ -375,11 +375,10 @@ def plot_3d_profile(fields, threshold_ratio=0.95, point_size=3,
         fig.patch.set_facecolor('black')
         ax.set_facecolor('black')
     
-    # 임계값 이상의 점들 플롯
-    if len(x_indices) > 0:
-        scatter = ax.scatter(x_indices, y_indices, z_indices, 
-                   color='white', s=point_size, 
-                   alpha=0.8)
+
+    scatter = ax.scatter(x_indices, y_indices, z_indices, 
+                color='white', s=point_size, 
+                alpha=0.8)
         
         # 컬러바 추가
         # cbar = plt.colorbar(scatter, ax=ax, shrink=0.5, aspect=20)
@@ -416,8 +415,8 @@ def plot_3d_profile(fields, threshold_ratio=0.95, point_size=3,
     ax.set_zlim(0, nz)
     
     # only show the center area of the core
-    ax.set_xlim(core_center_x - R/8, core_center_x + R/8)
-    ax.set_ylim(core_center_y - R/8, core_center_y + R/8)
+    ax.set_xlim(core_center_x - R/16, core_center_x + R/16)
+    ax.set_ylim(core_center_y - R/16, core_center_y + R/16)
     ax.set_zlim(0, nz)
 
     ax.grid(False)
@@ -437,7 +436,7 @@ def plot_3d_profile(fields, threshold_ratio=0.95, point_size=3,
     
     return fig, ax
 
-def make_3d_animation(fields, radius=10, propagation_length=100, filename=None, extent=None, interpolation=None):
+def make_3d_animation(fields, radius=10, propagation_length=100, filename=None, extent=None, roi=None, interpolation=None):
     intensities = np.abs(fields)**2
 
     if not os.path.exists('frames'):
@@ -452,7 +451,7 @@ def make_3d_animation(fields, radius=10, propagation_length=100, filename=None, 
         vmax = np.max(intensities[i])
         norm = Normalize(vmin=vmin, vmax=vmax)
 
-        extent = [-radius, radius, -radius, radius]
+        extent = [-radius/1e-6, radius/1e-6, -radius/1e-6, radius/1e-6]
 
         fig, ax = plt.subplots(figsize=(6, 6))
         im = ax.imshow(intensities[i], cmap='turbo', norm=norm, origin='lower', extent=extent, interpolation=interpolation)
@@ -462,10 +461,14 @@ def make_3d_animation(fields, radius=10, propagation_length=100, filename=None, 
         plt.ylabel(r'y ($\mu m$)')
 
         # Only plot the half of the image
-        ax.set_xlim([-radius, radius])
-        ax.set_ylim([-radius, radius])
+        if roi is not None:
+            ax.set_xlim([-roi/1e-6, roi/1e-6])
+            ax.set_ylim([-roi/1e-6, roi/1e-6])
+        else:
+            ax.set_xlim([-radius/1e-6, radius/1e-6])
+            ax.set_ylim([-radius/1e-6, radius/1e-6])
 
-        fiber = Circle((0, 0), radius, fill=False, linestyle='--', edgecolor='white', linewidth=2.0)
+        fiber = Circle((0, 0), radius/1e-6, fill=False, linestyle='--', edgecolor='white', linewidth=2.0)
         ax.add_patch(fiber)
         
           # Convert to cm if needed
@@ -478,7 +481,7 @@ def make_3d_animation(fields, radius=10, propagation_length=100, filename=None, 
         plt.close()
 
     fps = 10  # Frames per second
-    with imageio.get_writer(filename + '.mp4', fps=fps) as writer:
+    with imageio.get_writer(filename, fps=fps) as writer:
         for i in range(num_frames):
             image = imageio.imread(f'frames/frame_{i:03d}.png')
             writer.append_data(image)

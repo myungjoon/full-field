@@ -14,13 +14,13 @@ parser = argparse.ArgumentParser(description='Simulation parameters')
 parser.add_argument('--seed', type=int, default=61, help='Random seed for reproducibility')
 parser.add_argument('--input_type', type=str, default='mode', choices=['gaussian', 'mode'], help='Input type')
 parser.add_argument('--num_modes', type=int, default=8, help='Number of input modes')
-parser.add_argument('--total_power', type=float, default=1.6e3, help='Total power (W)')
+parser.add_argument('--total_power', type=float, default=144e3, help='Total power (W)')
 parser.add_argument('--beam_radius', type=float, default=50e-6, help='Beam radius (m)')
-parser.add_argument('--position', type=str, default='on', choices=['on', 'off', 'off1', 'off2', 'off3'], help='Beam position')
+parser.add_argument('--position', type=str, default='off1', choices=['on', 'off', 'off1', 'off2', 'off3'], help='Beam position')
 parser.add_argument('--disorder', type=bool, default=False, help='Disorder in the fiber')
-parser.add_argument('--precision', type=str, default='single', choices=['single', 'double'], help='Precision of the simulation')
+parser.add_argument('--precision', type=str, default='double', choices=['single', 'double'], help='Precision of the simulation')
 parser.add_argument('--num_pixels', type=int, default=32, help='Number of pixels for the phase map')
-parser.add_argument('--scale', type=float, default=1.0, help='Scale factor for the input beam')
+parser.add_argument('--scale', type=float, default=2.0, help='Scale factor for the input beam')
 parser.add_argument('--in_phase', type=bool, default=True, help='Input beam in phase')
 parser.add_argument('--device_id', type=int, default=0, help='Device ID for CUDA')
 
@@ -119,7 +119,7 @@ num_mode = 6
 #coefficients with random phase
 input_type = 'custom'
 coefficients = torch.tensor([0.3, 0.2, 0.2, 0.2, 0.1, 0.1])
-coefficients = coefficients.reshape((num_mode,1,1)) * np.exp(1j * np.random.uniform(0, 2 * np.pi, (num_mode, 1, 1)))
+coefficients = coefficients.reshape((num_mode,1,1)) * np.exp(1j * np.random.uniform(0, 1.0 * np.pi, (num_mode, 1, 1)))
 coefficients = coefficients.to(device)
 fields = torch.sum(coefficients * modes[:num_mode], dim=0)
 input_beam = Input(domain, wvl0, n_core, n_clad, phase_modulation=False, pixels=(2,2),

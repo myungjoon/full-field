@@ -1,8 +1,10 @@
 import numpy as np
 import torch
+
 from .mmfsim import grid as grids
 from .mmfsim.fiber import GrinFiber
 from .mmfsim.modes import GrinLPMode
+
 from .modes import calculate_modes, decompose_modes, n_to_lm, calculate_mode_field, calculate_mode_area
 
 from tqdm import tqdm
@@ -99,7 +101,7 @@ class Fiber:
 
 class Input:
     def __init__(self, domain, wvl0, n_core, n_clad, input_type="gaussian", beam_radius=50e-6, fiber_radius=0., num_modes=0,
-                 power=1.0, phase_modulation=False, pixels=(32, 32), in_phase=True, coefficients=None, scale=1.0, cx=0, cy=0, l=0, m=1, precision='single', device='cpu'):
+                 power=1.0, custom_fields=None, phase_modulation=False, pixels=(32, 32), in_phase=True, coefficients=None, scale=1.0, cx=0, cy=0, l=0, m=1, precision='single', device='cpu'):
         
         self.domain = domain
         self.wvl0 = wvl0
@@ -124,6 +126,15 @@ class Input:
             self.field = self.speckle_beam(cx=cx, cy=cy, pixels=pixels)
         elif input_type=="fundamental":
             self.field = self.LP_modes(0, 1)
+        elif input_type=="custom":
+            self.field = custom_fields
+            dx = self.domain.Lx / self.domain.Nx
+            dy = self.domain.Ly / self.domain.Ny
+            self.field = normalize_field_to_power(self.field.to(self.device), dx, dy, self.power)
+            if scale != 1.0:
+                self.field = scale_field(self.field, scale)
+            self.field = torch.roll(self.field, shifts=(int(cx/dx), int(cy/dy)), dims=(0, 1))
+            
         else:
             raise ValueError('Invalid Input Type')
 
@@ -244,8 +255,8 @@ def scale_field(input_field, scale_factor):
 
     center = size / 2.0
     
-    y_coords = torch.arange(4096, device=device, dtype=torch.float32)
-    x_coords = torch.arange(4096, device=device, dtype=torch.float32)
+    y_coords = torch.arange(size, device=device, dtype=torch.float32)
+    x_coords = torch.arange(size, device=device, dtype=torch.float32)
     y_grid, x_grid = torch.meshgrid(y_coords, x_coords, indexing='ij')
     
 
@@ -253,16 +264,16 @@ def scale_field(input_field, scale_factor):
     orig_x = (x_grid - center) / scale_factor + center
     
 
-    valid_mask = ((orig_y >= 0) & (orig_y < 4096) & 
-                  (orig_x >= 0) & (orig_x < 4096))
+    valid_mask = ((orig_y >= 0) & (orig_y < size) & 
+                  (orig_x >= 0) & (orig_x < size))
     
-    scaled_field = torch.zeros((4096, 4096), device=device, dtype=dtype)
+    scaled_field = torch.zeros((size, size), device=device, dtype=dtype)
     
     # interpolation
     y_floor = torch.floor(orig_y[valid_mask]).long()
     x_floor = torch.floor(orig_x[valid_mask]).long()
-    y_ceil = torch.clamp(y_floor + 1, max=4095)
-    x_ceil = torch.clamp(x_floor + 1, max=4095)
+    y_ceil = torch.clamp(y_floor + 1, max=size-1)
+    x_ceil = torch.clamp(x_floor + 1, max=size-1)
     
     dy = orig_y[valid_mask] - y_floor.float()
     dx = orig_x[valid_mask] - x_floor.float()
@@ -350,7 +361,7 @@ def run(domain, medium, input, boundary="periodic", dz=1e-06, num_field_sample=1
         # For periodic boundary conditions, we assume the field is periodic in both x and y directions
         boundary = 1.0
     elif boundary == "absorbing":
-        boundary = torch.exp(-2*((torch.sqrt(X**2+Y**2)/(medium.radius*1.5))**10))
+        boundary = torch.exp(-2*((torch.sqrt(X**2+Y**2)/(medium.radius*1.2))**10))
         boundary = boundary.to(device)
 
     

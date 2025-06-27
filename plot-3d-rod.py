@@ -18,8 +18,9 @@ radius = 450e-6
 beam_radius = 50e-6
 total_power = 500000
 
-fields = np.load(f'fields_{input_type}_{beam_radius}_{position}_{total_power}_{precision}_{num_grids}.npy')
-fields = fields[:len(fields)//2,:,:]  # Take only the first half of the fields
-fields = fields[::2,:,:]
+# fields = np.load(f'fields_{input_type}_{beam_radius}_{position}_{total_power}_{precision}_{num_grids}.npy')
+fields = np.load(f'fields_mode_10_on_1600000.npy')
+# fields = fields[:len(fields)//2,:,:]  # Take only the first half of the fields
+# fields = fields[::2,:,:]
 plot_3d_profile(fields,)
 plt.show()

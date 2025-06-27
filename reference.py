@@ -1,8 +1,9 @@
 import numpy as np
 import cupy as cp
 import matplotlib.pyplot as plt
-import scipy.special as special
-import time, math
+import scipy.io as sio
+import time
+from scipy import special
 from tqdm import tqdm
 
 def gaus2d(x=0, y=0, mx=0, my=0, sx=1, sy=1,p=40,w=26.5e-6):
@@ -17,7 +18,7 @@ def modes(m,l,fwhm):
     p=l-1   # l-1 of LP_ml
     m=m   # m of LP_ml 
 
-    Apm=np.sqrt(math.factorial(p)/np.pi/math.factorial(p+np.abs(m)))
+    Apm=np.sqrt(np.math.factorial(p)/np.pi/np.math.factorial(p+np.abs(m)))
 
     c = 299792458               # [m/s]
     n0 = 1.45                   # Refractive index of medium (1.44 for 1550 nm, 1.45 for 1030 nm)
@@ -37,32 +38,22 @@ def modes(m,l,fwhm):
     gaussian_mag=np.exp( - (((x1**2)/(2*(fwhm/2.35482)**2)+ (y1**2)/(2*(fwhm/2.35482)**2))))
     return cp.asarray(gaussian_mag*np.exp(1j*phase_mod))
 
-c = 299792458 # [m/s]
-n0 = 1.45                   # Refractive index of medium (1.44 for 1550 nm, 1.45 for 1030 nm)
-lambda_c = 775e-9          # Central wavelength of the input pulse in [m]
-k0 = w*n0/c
-n2 = 3.2e-20       #Kerr coefficient (m^2/W)
-R = 25e-6
-
-spacewidth = 54.1442e-6
-xres = 54.1442e-6/64
+Nx, Ny = 256, 256
+fiber_radius = 25e-6
+# spacewidth = 54.1442e-6
+spacewidth = fiber_radius * 4  # 4 times the fiber radius
+xres=spacewidth/Nx
 x = np.linspace(-spacewidth*0.5,spacewidth*0.5,int(spacewidth/xres))
+
+xsteps=len(x)
+y = x
+
 
 x1, y1 = np.meshgrid(x, x) # get 2D variables instead of 1D
 z = gaus2d(x1, y1)
 
-plt.figure(1)
-plt.plot(x,z[32,:])
-plt.grid()
-plt.xlim((-27.072e-6,27.072e-6))
-
 cp_super_gauss2d =cp.asarray(z)
-cp_super_gauss2d = cp.repeat(cp_super_gauss2d[:,:,cp.newaxis], 1024, axis=2)
-
-plt.figure(2)
-plt.imshow(z)
-plt.colorbar()
-
+cp_super_gauss2d = cp.repeat(cp_super_gauss2d[:,:,cp.newaxis], 1, axis=2)  # Changed from 1024 to 1
 
 FF=modes(1,1,20e-6)
 print(cp.max(cp.abs(FF)))
@@ -70,44 +61,30 @@ print(cp.max(cp.abs(FF)))
 FFabs=cp.abs(FF)
 FFangle=cp.angle(FF)
 
-plt.figure(3)
-plt.imshow(FFabs.get())
-plt.colorbar()
+ttt = time.time()
+c = 299792458 # [m/s]
+n0 = 1.45                   # Refractive index of medium (1.44 for 1550 nm, 1.45 for 1030 nm)
+lambda_c = 775e-9          # Central wavelength of the input pulse in [m]
 
-plt.figure(4)
-plt.imshow(FFangle.get())
-plt.colorbar()
-plt.show()
-
-
-start_time = time.time()
-
-
-## TIME SPACE DOMAIN
+## TIME SPACE DOMAIN - CW VERSION
 timewidth = 1.8e-12          # Width of the time window in [s]
-tres = timewidth/((2**10))
-t = cp.arange(-timewidth*0.5,(timewidth*0.5),tres)
-#t = -timewidth*0.5:tres:timewidth*0.5 # Time in [s]
-timesteps=len(t)
+tres = timewidth  # Single time point
+t = cp.array([0.0])  # Single time point at t=0
+timesteps = 1  # Single time step
 
-spacewidth=54.1442e-6
-xres = spacewidth/((2**6))
-#x = -spacewidth*0.5:xres:spacewidth*0.5 # Time in [s]
 x = cp.arange(-spacewidth*0.5,(spacewidth*0.5),xres)
-xsteps=len(x)
 y = x
 [X,Y,T] = cp.meshgrid(x,y,t)
 
-## FOURIER DOMAIN
+
+## FOURIER DOMAIN - CW VERSION
 fs=1/timewidth
-freq = c/lambda_c+fs*cp.linspace(-timesteps/2,timesteps/2,num = timesteps)
-#freq=c/lambda_c+fs*linspace(-(timesteps-1)/2,(timesteps-1)/2,timesteps) # [Hz]
+freq = cp.array([c/lambda_c])  # Single frequency at center wavelength
 wave=c/freq # [m]
 w=2*cp.pi*c/lambda_c # [Hz]
 omegas=2*cp.pi*freq
 wt = omegas-w
 
-#CHECK KX
 a = cp.pi/xres  # grid points in "frequency" domain--> {2*pi*(points/mm)}
 N = len(x)
 zbam = cp.arange(-a,(a-2*a/N)+(2*a/N),2*a/N)
@@ -116,7 +93,9 @@ ky = kx
 [KX,KY,WT] = cp.meshgrid(kx,ky,wt)
 
 ## OPERATORS
-
+k0 = w*n0/c
+n2 = 3.2e-20       #Kerr coefficient (m^2/W)
+R = 25e-6
 beta2 = 24.8e-27
 beta3 = 23.3e-42
 gamma = (2*cp.pi*n2/(lambda_c))
@@ -124,7 +103,7 @@ delta = 0.01
 NL1 = -1j*((k0*delta)/(R*R))*((X**2)+(Y**2))
 
 D1 = (0.5*1j/k0)*((-1j*(KX))**2+(-1j*(KY))**2)
-D2 = ((-0.5*1j*beta2)*(-1j*(WT))**2)+((beta3/6)*(-1j*(WT))**3)
+D2 = ((-0.5*1j*beta2)*(-1j*(WT))**2)+((beta3/6)*(-1j*(WT))**3)  # Will be zero for CW
 D = D1 + D2
 s_imgper = (cp.pi*R)/cp.sqrt(2*delta)
 dz = s_imgper/48
@@ -132,41 +111,35 @@ DFR = cp.exp(D*dz/2)
 
 ## INPUT 
 flength = s_imgper*10
-fstep = flength/dz
+fstep = flength / dz
 x_fwhm = 1
-#x_fwhm=cp.linspace(22e-6, 24e-6, num=32) # 20 24, 20 23,,,  22fix 
-#x_fwhm_small = 18e-6
-#x_fwhm_small=cp.linspace(8e-6, 18e-6, num=1000)  # 12 16, 15 18,,, 5 to 15   8to18
 p_don=20
-t_fwhm = 100e-15
+t_fwhm = 100e-15  # Not used in CW
 Ppeak = 1e9 #270*50e3 # W 180
-#Ppeak = cp.linspace(3e6, 30e6, num=1000)
-data_s=np.zeros((480,64,64))
-data_t=np.zeros((480,1024))
+data_s=np.zeros((480,Nx,Ny))
+data_t=np.zeros((480,1))  # Changed from 1024 to 1
 fwhm=20e-6
 
-#for musti in range(1000):
-#for ulas in range(1):
-for ulas2 in tqdm(range(1000), desc='Simulation Progress'):
-    #A = cp.sqrt(Ppeak/(cp.pi*(x_fwhm**2-x_fwhm_small[ulas2]**2)))*cp.exp( - (((X**2)/(2*(x_fwhm/2.35482)**2)+ (Y**2)/(2*(x_fwhm/2.35482)**2))**p_don + (T**2)/(2*(t_fwhm/2.35482)**2)))-cp.sqrt(Ppeak/(cp.pi*(x_fwhm**2-x_fwhm_small[ulas2]**2)))*cp.exp( - (((X**2)/(2*(x_fwhm_small[ulas2]/2.35482)**2)+ (Y**2)/(2*(x_fwhm_small[ulas2]/2.35482)**2))**p_don + (T**2)/(2*(t_fwhm/2.35482)**2)));
-    #A = cp.sqrt(Ppeak/(cp.pi*(x_fwhm**2)))*cp.exp( - (((X**2)/(2*(x_fwhm/2.35482)**2)+ (Y**2)/(2*(x_fwhm/2.35482)**2))**p_don + (T**2)/(2*(t_fwhm/2.35482)**2)))-cp.sqrt(Ppeak/(cp.pi*(x_fwhm**2)))*cp.exp( - (((X**2)/(2*(x_fwhm_small[ulas2]/2.35482)**2)+ (Y**2)/(2*(x_fwhm_small[ulas2]/2.35482)**2))**p_don + (T**2)/(2*(t_fwhm/2.35482)**2)));
+for ulas2 in tqdm(range(1), desc='Processing'):
     coefs=np.random.rand(6)
     coefs=coefs/np.sum(coefs)
     A_transverse=cp.abs(modes(0,1,fwhm))*cp.exp(1j*(cp.angle(modes(0,2,fwhm))*coefs[1]+cp.angle(modes(0,3,fwhm))*coefs[2]+cp.angle(modes(1,1,fwhm))*coefs[3]+cp.angle(modes(1,2,fwhm))*coefs[4]+cp.angle(modes(2,1,fwhm))*coefs[5]+cp.angle(modes(0,1,fwhm))*coefs[0] ))
-    #A_tresh=(A_transverse>0.1)
-    #area=cp.sum(FFtresh)*xres**2
-    pulse_time=cp.exp(-(T**2)/(2*(t_fwhm/2.35482)**2))
-    A=( pulse_time.transpose() * A_transverse.transpose() ).transpose()
-    A_tr_max =cp.max(cp.squeeze(cp.sum(cp.square(cp.abs(A)),axis=2)))
-    #print(A_tr_max)
-    A=A/cp.sqrt(A_tr_max)*cp.sqrt(Ppeak/(cp.pi*(fwhm**2)))
-    #A=cp.sqrt(Ppeak/area)*cp.exp( - (((X**2)/(2*(x_fwhm/2.35482)**2)+ (Y**2)/(2*(x_fwhm/2.35482)**2))**p_don*cp.repeat(A_transverse[:,:,cp.newaxis], 1024, axis=2) + (T**2)/(2*(t_fwhm/2.35482)**2)))
+    
+    # CW version - no time pulse, just constant amplitude
+    pulse_time = cp.ones_like(T)  # Constant in time for CW
+    # A=( pulse_time.transpose() * A_transverse.transpose() ).transpose()
+    # A_tr_max =cp.max(cp.squeeze(cp.sum(cp.square(cp.abs(A)),axis=2)))
+    # A=A/cp.sqrt(A_tr_max)*cp.sqrt(Ppeak/(cp.pi*(fwhm**2)))
+    
     ### MAIN FUNCTION
-    Ain = A
-    #Asave = cp.zeros((sampesize,64,64,1024), dtype=complex)
-
+    Ain = A_transverse.reshape([Nx, Ny, 1]) # Combine transverse and time components
+    A_initial = Ain.get().squeeze()
+    plt.imshow(np.abs(A_initial)**2, cmap='turbo', interpolation='nearest')
+    plt.figure(2)
+    plt.imshow(np.angle(A_initial), cmap='turbo', interpolation='nearest')
+    plt.colorbar()
+    plt.show()
     for ugur in range(int(fstep)):
-        #print((ugur*dz)+dz)
         Einf=cp.fft.fftshift(cp.fft.fftn(Ain))
         Ein2=cp.fft.ifftn(cp.fft.ifftshift(Einf*DFR))
         Eout = Ein2
@@ -186,12 +159,10 @@ for ulas2 in tqdm(range(1000), desc='Simulation Progress'):
         tt =cp.sum(cp.squeeze(cp.sum(Ain_cpu,axis=0)),axis=0)
 
         data_s[ugur,:,:]=ss.get()
-
         data_t[ugur,:]=tt.get()
 
+A_dis=Ain.get().squeeze()
 
-A_dis=A.get()
-A_disp=np.squeeze(np.sum(A_dis,axis=2))
-
-elapsed = time.time() - start_time
-print(elapsed)
+plt.imshow(np.abs(A_dis)**2, cmap='turbo', interpolation='nearest')
+plt.show()
+# A_disp=np.squeeze(np.sum(A_dis,axis=2))

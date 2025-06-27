@@ -14,15 +14,15 @@ parser = argparse.ArgumentParser(description='Simulation parameters')
 parser.add_argument('--seed', type=int, default=61, help='Random seed for reproducibility')
 parser.add_argument('--input_type', type=str, default='mode', choices=['gaussian', 'mode'], help='Input type')
 parser.add_argument('--num_modes', type=int, default=8, help='Number of input modes')
-parser.add_argument('--total_power', type=float, default=1.6e3, help='Total power (W)')
+parser.add_argument('--total_power', type=float, default=160e3, help='Total power (W)')
 parser.add_argument('--beam_radius', type=float, default=50e-6, help='Beam radius (m)')
 parser.add_argument('--position', type=str, default='on', choices=['on', 'off', 'off1', 'off2', 'off3'], help='Beam position')
 parser.add_argument('--disorder', type=bool, default=False, help='Disorder in the fiber')
-parser.add_argument('--precision', type=str, default='single', choices=['single', 'double'], help='Precision of the simulation')
+parser.add_argument('--precision', type=str, default='double', choices=['single', 'double'], help='Precision of the simulation')
 parser.add_argument('--num_pixels', type=int, default=32, help='Number of pixels for the phase map')
-parser.add_argument('--scale', type=float, default=1.0, help='Scale factor for the input beam')
+parser.add_argument('--scale', type=float, default=2.0, help='Scale factor for the input beam')
 parser.add_argument('--in_phase', type=bool, default=True, help='Input beam in phase')
-parser.add_argument('--device_id', type=int, default=0, help='Device ID for CUDA')
+parser.add_argument('--device_id', type=int, default=1, help='Device ID for CUDA')
 
 args = parser.parse_args()
 print(f'Input type: {args.input_type}')
@@ -70,7 +70,7 @@ n_clad = 1.457
 n_core = np.sqrt(NA**2 + n_clad**2)
 n2 = 3.2e-20 * 2 # factor 2 for the estimantion of GRIN rod material property
 fiber_radius = 450e-6
-propagation_length = 0.15
+propagation_length = 1.0
 
 # Simulation domain parameters
 Lx, Ly = 3*fiber_radius, 3*fiber_radius
@@ -78,7 +78,7 @@ unit = 1e-6
 Nx, Ny = 2048, 2048
 print(f'The grid size is {Nx}x{Ny}')
 ds_factor = 4 if Nx >= 2048 else 1 # downsampling factor for memory efficiency
-dz = 1e-5
+dz = 5e-6
 
 mode_decompose = False
 domain = Domain(Lx, Ly, Nx, Ny, propagation_length, device=device)
@@ -92,8 +92,8 @@ fiber_indices = fiber.n.cpu().numpy()
 extent = [-Lx/2/unit, Lx/2/unit, -Ly/2/unit, Ly/2/unit]
 
 fiber_index = fiber.n.cpu().numpy()
-num_field_sample = 500
-num_mode_sample = 500
+num_field_sample = 1000
+num_mode_sample = 1000
 
 if position in ("off", "off1"):
     cy = fiber_radius / 4
@@ -119,7 +119,7 @@ num_mode = 6
 #coefficients with random phase
 input_type = 'custom'
 coefficients = torch.tensor([0.3, 0.2, 0.2, 0.2, 0.1, 0.1])
-coefficients = coefficients.reshape((num_mode,1,1)) * np.exp(1j * np.random.uniform(0, 2 * np.pi, (num_mode, 1, 1)))
+coefficients = coefficients.reshape((num_mode,1,1)) * np.exp(1j * np.random.uniform(0, 1.0 * np.pi, (num_mode, 1, 1)))
 coefficients = coefficients.to(device)
 fields = torch.sum(coefficients * modes[:num_mode], dim=0)
 input_beam = Input(domain, wvl0, n_core, n_clad, phase_modulation=False, pixels=(2,2),

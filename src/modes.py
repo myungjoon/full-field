@@ -1,9 +1,9 @@
 import numpy as np
 import torch
 
-import mmfsim.grid as grids
-from mmfsim.fiber import GrinFiber
-from mmfsim.modes import GrinLPMode
+# import .mmfsim.grid as grids
+# from .mmfsim.fiber import GrinFiber
+from .mmfsim.modes import GrinLPMode
 
 def calculate_mode_field(grid, grin_fiber, n, device='cpu'):
     l, m, k = n_to_lm(n)
