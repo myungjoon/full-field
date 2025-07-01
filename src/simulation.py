@@ -58,8 +58,8 @@ class KerrMedium:
         self.device = device
         self.n = torch.fill(self.domain.X, self.n0).to(self.device)
 
-class Fiber:
-    def __init__(self, domain, nc, n0, n2=2e-20, radius=5e-6,  
+class Waveguide:
+    def __init__(self, domain, nc, n0, n2=2e-20, radius=5e-6, beta2=16.55e-27,
                  structure_type="GRIN", disorder=False, precision='single', device='cpu'):
         self.device = device
 
@@ -100,7 +100,7 @@ class Fiber:
         return n.to(self.device)
 
 class Input:
-    def __init__(self, domain, wvl0, n_core, n_clad, input_type="gaussian", beam_radius=50e-6, fiber_radius=0., num_modes=0,
+    def __init__(self, domain, wvl0, n_core, n_clad, input_type="gaussian", beam_radius=50e-6, waveguide_radius=0., num_modes=0,
                  power=1.0, custom_fields=None, phase_modulation=False, pixels=(32, 32), in_phase=True, coefficients=None, scale=1.0, cx=0, cy=0, l=0, m=1, precision='single', device='cpu'):
         
         self.domain = domain
@@ -108,7 +108,7 @@ class Input:
         self.n_core = n_core
         self.n_clad = n_clad
         self.power = power
-        self.fiber_radius = fiber_radius
+        self.waveguide_radius = waveguide_radius
         self.device = device
 
         if precision == 'double':
@@ -198,7 +198,7 @@ class Input:
     def LP_modes(self, l, m,):
         epsilon = 1e-30
         grid = grids.Grid(pixel_size=self.domain.Lx/self.domain.Nx, pixel_numbers=(self.domain.Nx, self.domain.Ny))
-        grin_fiber = GrinFiber(radius=self.fiber_radius, wavelength=self.wvl0, n1=self.n_core, n2=self.n_clad)
+        grin_fiber = GrinFiber(radius=self.waveguide_radius, wavelength=self.wvl0, n1=self.n_core, n2=self.n_clad)
         mode = GrinLPMode(l, m)
         mode.compute(grin_fiber, grid)
         field = torch.tensor(mode._fields[:, :, 0])
@@ -304,8 +304,82 @@ def calculate_effective_mode_area(mode_field, dx, dy):
     A_eff = (integral_E2**2) / integral_E4 
     return A_eff
 
+def run_spatiotemporal_simulation(domain, medium, input, boundary="periodic",
+                                  dz=1e-06, num_field_sample=100, precision='single', ds_factor=1,):
+    # device check
+    input_device = input.device
+    medium_device = medium.device
+    domain_device = domain.device
+    if input_device != medium_device or input_device != domain_device:
+        raise ValueError('Input, fiber and domain should be on the same device')
+    device = input_device
+
+    # precision check    
+    if precision == 'single':
+        real_dtype = torch.float32
+        complex_dtype = torch.complex64
+    elif precision == 'double':
+        real_dtype = torch.float64
+        complex_dtype = torch.complex128
+    else:
+        raise ValueError("Precision must be 'single' or 'double'.")
     
-def run(domain, medium, input, boundary="periodic", dz=1e-06, num_field_sample=100, 
+
+    k0 = 2 * torch.pi / input.wvl0
+    kz = (k0 * medium.n0)**2 - domain.KX**2 - domain.KY**2
+    kz = kz.type(complex_dtype)
+    KZ = torch.sqrt(kz)
+    Kin = k0 * (medium.n - medium.n0)
+    
+    n_step = int(domain.total_z / dz)
+
+    if num_field_sample > n_step:
+        num_field_sample = n_step
+    field_sample_interval = n_step // num_field_sample
+
+    energy_arr = torch.zeros(num_field_sample+1)
+    field_arr = torch.zeros((num_field_sample+1, domain.Nx // ds_factor, domain.Ny // ds_factor), dtype=complex_dtype)
+    
+    X = domain.X = domain.X.to(device)
+    Y = domain.Y = domain.Y.to(device)
+
+    dx = domain.Lx / domain.Nx
+    dy = domain.Ly / domain.Ny
+    dA = dx * dy
+
+    if boundary == "periodic":
+        # For periodic boundary conditions, we assume the field is periodic in both x and y directions
+        boundary = 1.0
+    elif boundary == "absorbing":
+        boundary = torch.exp(-2*((torch.sqrt(X**2+Y**2)/(medium.radius*1.2))**10))
+        boundary = boundary.to(device)
+
+    D = KZ
+
+    E_real = input.field
+    E_shape = E_real.shape
+
+    for i in tqdm(range(n_step), desc="Simulating propagation"):        
+        if (i % field_sample_interval == 0) and cnt < num_field_sample:
+            energy = torch.sum(torch.abs(E_real)**2)
+            energy_arr[cnt] = energy.item()
+            field_arr[cnt] = E_real[::ds_factor, ::ds_factor]
+            cnt += 1
+        
+        E_fft = torch.fft.fft2(E_real)
+        E_fft = E_fft * torch.exp(1j * D * dz/2)
+        E_real = torch.fft.ifft2(E_fft)
+
+        Knl = medium.n2 * k0 * torch.abs(E_real)**2
+        N = Knl
+        E_real = E_real * torch.exp(1j * (Kin + Knl) * dz)
+
+        E_fft = torch.fft.fft2(E_real)
+        E_fft = E_fft * torch.exp(1j * D * dz/2)
+        E_real = torch.fft.ifft2(E_fft)
+        E_real = E_real * boundary
+
+def run(domain, medium, input, boundary="absorbing", dz=1e-06, num_field_sample=100, 
         num_mode_sample=500, precision='single', ds_factor=1, disorder=False, 
         trace_modes=False, calculate_nl_phase=False, max_mode_num = 20):
     

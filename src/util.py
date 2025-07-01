@@ -436,7 +436,7 @@ def plot_3d_profile(fields, threshold_ratio=0.99, point_size=3,
     
     return fig, ax
 
-def make_3d_animation(fields, radius=10, propagation_length=100, filename=None, extent=None, roi=None, interpolation=None):
+def make_3d_animation(fields, waveguide_radius=10, propagation_length=100, filename=None, extent=None, roi=None, interpolation=None):
     intensities = np.abs(fields)**2
 
     if not os.path.exists('frames'):
@@ -451,12 +451,10 @@ def make_3d_animation(fields, radius=10, propagation_length=100, filename=None, 
         vmax = np.max(intensities[i])
         norm = Normalize(vmin=vmin, vmax=vmax)
 
-        extent = [-radius/1e-6, radius/1e-6, -radius/1e-6, radius/1e-6]
+        extent = [-waveguide_radius/1e-6, waveguide_radius/1e-6, -waveguide_radius/1e-6, waveguide_radius/1e-6]
 
         fig, ax = plt.subplots(figsize=(6, 6))
-        im = ax.imshow(intensities[i], cmap='turbo', norm=norm, origin='lower', extent=extent, interpolation=interpolation)
-        # ax.set_xlim([-750, 750])
-        # ax.set_ylim([-750, 750])
+        ax.imshow(intensities[i], cmap='turbo', norm=norm, origin='lower', extent=extent, interpolation=interpolation)
         plt.xlabel(r'x ($\mu m$)')
         plt.ylabel(r'y ($\mu m$)')
 
@@ -465,11 +463,11 @@ def make_3d_animation(fields, radius=10, propagation_length=100, filename=None, 
             ax.set_xlim([-roi/1e-6, roi/1e-6])
             ax.set_ylim([-roi/1e-6, roi/1e-6])
         else:
-            ax.set_xlim([-radius/1e-6, radius/1e-6])
-            ax.set_ylim([-radius/1e-6, radius/1e-6])
+            ax.set_xlim([-waveguide_radius/1e-6, waveguide_radius/1e-6])
+            ax.set_ylim([-waveguide_radius/1e-6, waveguide_radius/1e-6])
 
-        fiber = Circle((0, 0), radius/1e-6, fill=False, linestyle='--', edgecolor='white', linewidth=2.0)
-        ax.add_patch(fiber)
+        waveguide = Circle((0, 0), waveguide_radius/1e-6, fill=False, linestyle='--', edgecolor='white', linewidth=2.0)
+        ax.add_patch(waveguide)
         
           # Convert to cm if needed
 
@@ -485,8 +483,6 @@ def make_3d_animation(fields, radius=10, propagation_length=100, filename=None, 
         for i in range(num_frames):
             image = imageio.imread(f'frames/frame_{i:03d}.png')
             writer.append_data(image)
-
-
 
 
 def correlation(simulation, reference, dx=1e-6):

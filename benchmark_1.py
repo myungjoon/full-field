@@ -16,7 +16,7 @@ parser.add_argument('--input_type', type=str, default='mode', choices=['gaussian
 parser.add_argument('--num_modes', type=int, default=8, help='Number of input modes')
 parser.add_argument('--total_power', type=float, default=160e3, help='Total power (W)')
 parser.add_argument('--beam_radius', type=float, default=50e-6, help='Beam radius (m)')
-parser.add_argument('--position', type=str, default='on', choices=['on', 'off', 'off1', 'off2', 'off3'], help='Beam position')
+parser.add_argument('--position', type=str, default='on', choices=['on', 'off'], help='Beam position')
 parser.add_argument('--disorder', type=bool, default=False, help='Disorder in the fiber')
 parser.add_argument('--precision', type=str, default='double', choices=['single', 'double'], help='Precision of the simulation')
 parser.add_argument('--num_pixels', type=int, default=32, help='Number of pixels for the phase map')
@@ -70,14 +70,14 @@ n_clad = 1.457
 n_core = np.sqrt(NA**2 + n_clad**2)
 n2 = 3.2e-20 * 2 # factor 2 for the estimantion of GRIN rod material property
 fiber_radius = 450e-6
-propagation_length = 1.0
+propagation_length = 2.0
 
 # Simulation domain parameters
 Lx, Ly = 3*fiber_radius, 3*fiber_radius
 unit = 1e-6
-Nx, Ny = 2048, 2048
+Nx, Ny = 4096, 4096
 print(f'The grid size is {Nx}x{Ny}')
-ds_factor = 4 if Nx >= 2048 else 1 # downsampling factor for memory efficiency
+ds_factor = 8 if Nx >= 2048 else 1 # downsampling factor for memory efficiency
 dz = 5e-6
 
 mode_decompose = False
@@ -95,14 +95,8 @@ fiber_index = fiber.n.cpu().numpy()
 num_field_sample = 1000
 num_mode_sample = 1000
 
-if position in ("off", "off1"):
+if position == 'off':
     cy = fiber_radius / 4
-    cx = 0
-elif position == "off2":
-    cy = fiber_radius / 2
-    cx = 0
-elif position == "off3":
-    cy = fiber_radius * 3 / 4
     cx = 0
 else:
     cx = 0
@@ -127,9 +121,9 @@ input_beam = Input(domain, wvl0, n_core, n_clad, phase_modulation=False, pixels=
                     power=total_power, num_modes=num_modes, fiber_radius=fiber_radius, device=device)
 # input_beam.field = fields
 
-input_field = input_beam.field.cpu().numpy()
-plot_beam_intensity_and_phase(input_field, indices=fiber_indices, extent=extent, interpolation=None)
-plt.show()
+# input_field = input_beam.field.cpu().numpy()
+# plot_beam_intensity_and_phase(input_field, indices=fiber_indices, extent=extent, interpolation=None)
+# plt.show()
 
 print(f'The simulation starts.')
 fields, energies, nl_phase, max_trajectory  = run(domain, fiber, input_beam, dz=dz, num_field_sample=num_field_sample,
