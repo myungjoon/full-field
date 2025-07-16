@@ -1,9 +1,37 @@
 import numpy as np
 import torch
 
-# import .mmfsim.grid as grids
-# from .mmfsim.fiber import GrinFiber
 from .mmfsim.modes import GrinLPMode
+from scipy.special import genlaguerre, factorial
+
+class Mode:
+    def __init__(self, domain, fiber, input_beam, l=0, m=0, device='cpu'):
+        self.Lx = domain.Lx
+        self.Ly = domain.Ly
+        self.Nx = domain.Nx
+        self.Ny = domain.Ny
+
+        self.radius = fiber.radius
+        self.n_core = fiber.n_core
+        self.n_clad = fiber.n_clad
+
+        self.wvl0 = input_beam.wvl0
+        self.device = device
+        self.l = l
+        self.m = m
+
+        # self.field = self.calculate_field()
+       
+    def calculate_field(self):       
+        grid = grids.Grid(pixel_size=self.Lx/self.Nx, pixel_numbers=(self.Nx, self.Ny))
+        grin_fiber = GrinFiber(radius=self.radius, wavelength=self.wvl0, n1=self.n_core, n2=self.n_clad)
+        mode = GrinLPMode(self.l, self.m)
+        mode.compute(grin_fiber, grid)
+        
+        field = torch.tensor(mode._fields)
+        # summation = torch.sum(torch.abs(field)**2)
+        field = field # / torch.sqrt(summation)
+        return field.to(self.device)
 
 def calculate_mode_field(grid, grin_fiber, n, device='cpu'):
     l, m, k = n_to_lm(n)
@@ -130,38 +158,6 @@ def n_to_lm(n):
     #     count += group_size
     #     group_sum += 1
 
-class Mode:
-    def __init__(self, domain, fiber, input_beam, l=0, m=0, device='cpu'):
-        self.Lx = domain.Lx
-        self.Ly = domain.Ly
-        self.Nx = domain.Nx
-        self.Ny = domain.Ny
-
-        self.radius = fiber.radius
-        self.n_core = fiber.n_core
-        self.n_clad = fiber.n_clad
-
-        self.wvl0 = input_beam.wvl0
-        self.device = device
-        self.l = l
-        self.m = m
-
-        # self.field = self.calculate_field()
-       
-    def calculate_field(self):       
-        grid = grids.Grid(pixel_size=self.Lx/self.Nx, pixel_numbers=(self.Nx, self.Ny))
-        grin_fiber = GrinFiber(radius=self.radius, wavelength=self.wvl0, n1=self.n_core, n2=self.n_clad)
-        mode = GrinLPMode(self.l, self.m)
-        mode.compute(grin_fiber, grid)
-        
-        field = torch.tensor(mode._fields)
-        # summation = torch.sum(torch.abs(field)**2)
-        field = field # / torch.sqrt(summation)
-        return field.to(self.device)
-
-def calculate_mode_area(domain, fiber, mode=0, device='cpu'):
-    return 1.0
-
 def calculate_modes(domain, fiber, input, num_modes=10, device='cpu'):
     grid = grids.Grid(pixel_size=domain.Lx/domain.Nx, pixel_numbers=(domain.Nx, domain.Ny))
     grin_fiber = GrinFiber(radius=fiber.radius, wavelength=input.wvl0, n1=fiber.nc, n2=fiber.n0)
@@ -188,3 +184,65 @@ def decompose_modes(field, modes, num_modes=10,):
     # coefficients = coefficients / torch.norm(coefficients)
 
     return coefficients
+
+
+def laguerre_gaussian_mode(r, phi, z, p, l, w0, wvl,):
+    """
+    Calculate Laguerre-Gaussian mode
+    
+    Parameters:
+    r, phi, z: cylindrical coordinates
+    p: radial mode index (0, 1, 2, ...)
+    l: azimuthal mode index (..., -2, -1, 0, 1, 2, ...)
+    w0: beam waist at z=0
+    wavelength: wavelength in same units as other parameters
+    
+    Returns:
+    Complex amplitude of LG mode
+    """
+  
+    k = 2 * np.pi / wvl
+    
+    # Rayleigh range
+    z_R = np.pi * w0**2 / wvl
+    
+    # Beam radius at position z
+    w_z = w0 * np.sqrt(1 + (z / z_R)**2)
+    
+    # Gouy phase
+    gouy_phase = (2*p + abs(l) + 1) * np.arctan(z / z_R)
+    
+    # Radius of curvature 
+    R_z = z * (1 + (z_R / z)**2) if z != 0 else np.inf
+    
+    # Normalized radial coordinate
+    rho = np.sqrt(2) * r / w_z
+    
+    # Normalization constant
+    C = np.sqrt(2 * factorial(p) / (np.pi * factorial(p + abs(l))))
+    C *= (1 / w_z)
+    
+    # Radial part with associated Laguerre polynomial
+    L_p_l = genlaguerre(p, abs(l))(rho**2)
+    radial_part = C * (rho**abs(l)) * L_p_l * np.exp(-rho**2 / 2)
+    
+    # Azimuthal part
+    azimuthal_part = np.exp(1j * l * phi)
+    
+    # Longitudinal phase
+    if R_z != np.inf:
+        longitudinal_phase = np.exp(-1j * k * r**2 / (2 * R_z))
+    else:
+        longitudinal_phase = 1
+    
+    # Propagation phase
+    propagation_phase = np.exp(1j * k * z)
+    
+    # Gouy phase
+    gouy_phase_term = np.exp(-1j * gouy_phase)
+    
+    # Complete LG mode
+    LG_mode = (radial_part * azimuthal_part * longitudinal_phase * 
+               propagation_phase * gouy_phase_term)
+    
+    return LG_mode

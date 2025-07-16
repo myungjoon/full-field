@@ -31,8 +31,8 @@ def get_spot_size(fields):
     return spot_size
 
 
-fields1 = np.load('fields_gaussian_5e-05_on_1600_single_4096_1e-05.npy')
-fields2 = np.load('fields_gaussian_5e-05_on_160000_single_4096_1e-05.npy')
+fields1 = np.load('fields_custom_2.5e-05_on_160000_double_4096_5e-06_0.15.npy')
+fields2 = np.load('fields_custom_2.5e-05_on_160000_double_2048_1e-05_0.15.npy')
 
 num_z = fields1.shape[0]
 z = np.linspace(0, 0.15, num_z)  # Propagation distance in meters
@@ -85,11 +85,11 @@ print(f' C1: {C1:.4f}, C2: {C2:.4f}, C3: {C3:.4f}')
 plt.figure(figsize=(8, 6))
 # plt.plot(z * 1e2, wz1 * 1e6, label='Theory, 1 kW')
 plt.plot(z * 1e2, wz1 * 1e6, label='Theory, 1.6 kW')
-plt.plot(z * 1e2, wz2 * 1e6, label='Theory, 160 kW')
+plt.plot(z * 1e2, wz2 * 1e6, label='Therory, 160 kW')
 plt.xlabel('Propagation distance (cm)')
 plt.ylabel('Spot size (um)')
 
-plt.plot(z * 1e2, wz1_sim * 1e6, label='Sim, 1.6 kW')
-plt.plot(z * 1e2, wz2_sim * 1e6, label='Sim, 160 kW')
+# plt.plot(z * 1e2, wz1_sim * 1e6, label='5e-6')
+plt.plot(z * 1e2, wz2_sim * 1e6, label='1e-5')
 plt.legend()
 plt.show()

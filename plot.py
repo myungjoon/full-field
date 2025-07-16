@@ -4,7 +4,7 @@ from src.util import make_3d_animation
 
 input_type = 'mode'
 waveguide_radius = 450e-6
-propagation_length = 1.0  # in meters
+propagation_length = 0.15  # in meters
 precision = 'single'
 position = 'off2'
 num_grids = 4096
@@ -13,8 +13,7 @@ total_power = 1600
 dz = 1e-5
 
 
-
-filename = f'fields_custom_2.5e-05_on_160000_double_2048_1e-05.npy'
+filename = f'fields_custom_2.5e-05_off_160000_double_2048_1e-05_0.15.npy'
 print(f'filename : {filename}')
 
 

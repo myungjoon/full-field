@@ -5,7 +5,7 @@ from .mmfsim import grid as grids
 from .mmfsim.fiber import GrinFiber
 from .mmfsim.modes import GrinLPMode
 
-from .modes import calculate_modes, decompose_modes, n_to_lm, calculate_mode_field, calculate_mode_area
+from .modes import calculate_modes, decompose_modes, n_to_lm, calculate_mode_field, laguerre_gaussian_mode
 
 from tqdm import tqdm
 
@@ -59,7 +59,7 @@ class KerrMedium:
         self.n = torch.fill(self.domain.X, self.n0).to(self.device)
 
 class Waveguide:
-    def __init__(self, domain, nc, n0, n2=2e-20, radius=5e-6, beta2=16.55e-27,
+    def __init__(self, domain, nc, n0, n2=2e-20, radius=5e-6,
                  structure_type="GRIN", disorder=False, precision='single', device='cpu'):
         self.device = device
 
@@ -101,7 +101,11 @@ class Waveguide:
 
 class Input:
     def __init__(self, domain, wvl0, n_core, n_clad, input_type="gaussian", beam_radius=50e-6, waveguide_radius=0., num_modes=0,
-                 power=1.0, custom_fields=None, phase_modulation=False, pixels=(32, 32), in_phase=True, coefficients=None, scale=1.0, cx=0, cy=0, l=0, m=1, precision='single', device='cpu'):
+                 power=1.0, custom_fields=None, phase_modulation=False, 
+                 in_phase=True, coefficients=None, 
+                 scale=1.0, cx=0, cy=0, l=0, m=1, 
+                 basis="LP",
+                 precision='single', device='cpu'):
         
         self.domain = domain
         self.wvl0 = wvl0
@@ -119,11 +123,11 @@ class Input:
             self.complex_dtype = torch.complex64
 
         if input_type=="gaussian":
-            self.field = self.gaussian_beam(beam_radius, cx=cx, cy=cy, phase_modulation=phase_modulation, pixels=pixels)
+            self.field = self.gaussian_beam(beam_radius, cx=cx, cy=cy, phase_modulation=phase_modulation,)
         elif input_type=="mode":
-            self.field = self.mode_mixing(num_modes, cx=cx, cy=cy, scale=scale, in_phase=in_phase, coefficients=coefficients)
+            self.field = self.mode_mixing(num_modes, cx=cx, cy=cy, scale=scale, in_phase=in_phase, coefficients=coefficients, basis=basis)
         elif input_type=="speckle":
-            self.field = self.speckle_beam(cx=cx, cy=cy, pixels=pixels)
+            self.field = self.speckle_beam(cx=cx, cy=cy,)
         elif input_type=="fundamental":
             self.field = self.LP_modes(0, 1)
         elif input_type=="custom":
@@ -216,26 +220,36 @@ class Input:
         
         return field.to(self.device)
 
-    def mode_mixing(self, num_mode, coefficients=None, cx=0, cy=0, scale=1.0, in_phase=False):
+    def mode_mixing(self, num_mode, coefficients=None, cx=0, cy=0, scale=1.0, in_phase=False, w0=50e-6, basis="LP"):
         grid = grids.Grid(pixel_size=self.domain.Lx/self.domain.Nx, pixel_numbers=(self.domain.Nx, self.domain.Ny))
-        grin_fiber = GrinFiber(radius=self.fiber_radius, wavelength=self.wvl0, n1=self.n_core, n2=self.n_clad)
+        grin_fiber = GrinFiber(radius=self.waveguide_radius, wavelength=self.wvl0, n1=self.n_core, n2=self.n_clad)
         
         total_field = torch.zeros_like(self.domain.X, dtype=self.complex_dtype).to(self.device)
 
-        if coefficients is None:
-            if in_phase:
-                theta = np.zeros(num_mode)
-                amp = np.random.uniform(0, 1, num_mode)
+        if basis == "LP":
+            if coefficients is None:
+                if in_phase:
+                    theta = np.zeros(num_mode)
+                    amp = np.random.uniform(0, 1, num_mode)
+                else:
+                    theta = np.random.uniform(0, 2*np.pi, num_mode)
+                    amp = np.ones(num_mode)
+                coefficients = amp * np.exp(1j * theta)
             else:
-                theta = np.random.uniform(0, 2*np.pi, num_mode)
-                amp = np.ones(num_mode)
-            coefficients = amp * np.exp(1j * theta)
-        else:
-            if not in_phase:
-                coefficients = coefficients * torch.exp(1j * torch.rand(num_mode) * 2 * torch.pi).to(self.device)
-        for n in range(num_mode):            
-            mode_field = calculate_mode_field(grid, grin_fiber, n).to(self.device)
-            total_field += (coefficients[n] * mode_field)
+                if not in_phase:
+                    coefficients = coefficients * torch.exp(1j * torch.rand(num_mode) * 2 * torch.pi).to(self.device)
+            for n in range(num_mode):            
+                mode_field = calculate_mode_field(grid, grin_fiber, n).to(self.device)
+                total_field += (coefficients[n] * mode_field)
+
+        elif basis == "LG":
+            # TODO: implement Laguerre-Gaussian modes using torch
+            R = torch.sqrt(self.domain.X**2 + self.domain.Y**2).cpu().numpy()
+            PHI = torch.arctan2(self.domain.Y, self.domain.X).cpu().numpy()
+            for n in range(num_mode):
+                total_field += (coefficients[n] * torch.tensor(laguerre_gaussian_mode(R, PHI, 0, n, 0, w0, self.wvl0))).to(self.device) # add only the radial modes
+
+        
         
         dx = self.domain.Lx / self.domain.Nx
         dy = self.domain.Ly / self.domain.Ny
@@ -345,7 +359,6 @@ def run_spatiotemporal_simulation(domain, medium, input, boundary="periodic",
 
     dx = domain.Lx / domain.Nx
     dy = domain.Ly / domain.Ny
-    dA = dx * dy
 
     if boundary == "periodic":
         # For periodic boundary conditions, we assume the field is periodic in both x and y directions
@@ -407,7 +420,7 @@ def run(domain, medium, input, boundary="absorbing", dz=1e-06, num_field_sample=
     KZ = torch.sqrt(kz)
     Kin = k0 * (medium.n - medium.n0)
     
-    n_step = int(domain.total_z / dz)
+    n_step = round(domain.total_z / dz)
 
     L_perturbation = domain.total_z / 100
     
@@ -421,7 +434,7 @@ def run(domain, medium, input, boundary="absorbing", dz=1e-06, num_field_sample=
 
     energy_arr = torch.zeros(num_field_sample+1)
     field_arr = torch.zeros((num_field_sample+1, domain.Nx // ds_factor, domain.Ny // ds_factor), dtype=complex_dtype)
-    
+    Knl_arr = torch.zeros(num_field_sample+1)
 
     
     X = domain.X = domain.X.to(device)
@@ -429,7 +442,6 @@ def run(domain, medium, input, boundary="absorbing", dz=1e-06, num_field_sample=
 
     dx = domain.Lx / domain.Nx
     dy = domain.Ly / domain.Ny
-    dA = dx * dy
 
     if boundary == "periodic":
         # For periodic boundary conditions, we assume the field is periodic in both x and y directions
@@ -437,9 +449,6 @@ def run(domain, medium, input, boundary="absorbing", dz=1e-06, num_field_sample=
     elif boundary == "absorbing":
         boundary = torch.exp(-2*((torch.sqrt(X**2+Y**2)/(medium.radius*1.2))**10))
         boundary = boundary.to(device)
-
-    
-    # mode_area = calculate_mode_area(domain, medium, mode=0, device=device)
 
     if trace_modes:
         modes_arr = torch.zeros((num_mode_sample, max_mode_num), dtype=real_dtype)
@@ -476,6 +485,7 @@ def run(domain, medium, input, boundary="absorbing", dz=1e-06, num_field_sample=
         if (i % field_sample_interval == 0) and cnt < num_field_sample:
             energy = torch.sum(torch.abs(E_real)**2)
             energy_arr[cnt] = energy.item()
+            Knl_arr[cnt] = torch.max(medium.n2 * k0 * torch.abs(E_real)**2).item()
             field_arr[cnt] = E_real[::ds_factor, ::ds_factor]
             cnt += 1
         
@@ -483,7 +493,8 @@ def run(domain, medium, input, boundary="absorbing", dz=1e-06, num_field_sample=
         E_fft = E_fft * torch.exp(1j  * KZ * dz/2)
         E_real = torch.fft.ifft2(E_fft)
 
-        Knl = medium.n2 * k0 * torch.abs(E_real)**2
+        # Knl = medium.n2 * k0 * torch.abs(E_real)**2
+        Knl = 0
         E_real = E_real * torch.exp(1j * (Kin + Knl) * dz)
 
         E_fft = torch.fft.fft2(E_real)
@@ -492,11 +503,9 @@ def run(domain, medium, input, boundary="absorbing", dz=1e-06, num_field_sample=
         E_real = E_real * boundary
 
         if calculate_nl_phase:
-            # A_eff = calculate_effective_mode_area(E_real, dx, dy)
-            total_power = torch.sum(torch.abs(E_real)**2) * dx * dy
             intensity = torch.abs(E_real)**2
             nl_phase = nl_phase + k0 * medium.n2 * intensity * dz
-            
+    
     energy = torch.sum(torch.abs(E_real)**2)
     energy_arr[cnt] = energy.item()
     field_arr[cnt] = E_real[::ds_factor, ::ds_factor]

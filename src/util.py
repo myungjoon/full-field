@@ -107,7 +107,6 @@ def plot_beam_intensity_and_phase(field, indices=None, extent=None, interpolatio
     fig, ax = plt.subplots(1, 2, figsize=(13, 5))
 
     eps = 1e-5
-    # extent = [-450, 450, -450, 450]
     xtick = np.linspace(0, field.shape[1]+eps, 5)
     ytick = np.linspace(0, field.shape[0]+eps, 5)
     xlabel = np.linspace(extent[0], extent[1], 5)
@@ -315,7 +314,7 @@ def print_total_power(domain, field):
     total_power = np.sum(np.abs(field)**2) * dx * dy
     print(f'Total power: {total_power:.4f} W')
 
-def plot_3d_profile(fields, threshold_ratio=0.99, point_size=3, 
+def plot_3d_profile(fields, threshold_ratio=0.9, point_size=3, 
                    alpha=0.9, colormap='turbo', 
                    background_color='black', figsize=(10, 8)):
     
@@ -389,13 +388,13 @@ def plot_3d_profile(fields, threshold_ratio=0.99, point_size=3,
     
     theta = np.linspace(0, 2*np.pi, 100)
     
-    z_positions = [0, nz-1]
-    for z in z_positions:
-        x_circle = core_center_x + R * np.cos(theta)
-        y_circle = core_center_y + R * np.sin(theta)
-        z_circle = np.full_like(theta, z)
-        ax.plot(x_circle, y_circle, z_circle, 'cyan', 
-                linewidth=2, alpha=alpha)
+    # z_positions = [0, nz-1]
+    # for z in z_positions:
+    #     x_circle = core_center_x + R * np.cos(theta)
+    #     y_circle = core_center_y + R * np.sin(theta)
+    #     z_circle = np.full_like(theta, z)
+    #     ax.plot(x_circle, y_circle, z_circle, 'cyan', 
+    #             linewidth=2, alpha=alpha)
     
     n_vertical_lines = 2
     for i in range(0, 100, 100//n_vertical_lines):
@@ -444,6 +443,9 @@ def make_3d_animation(fields, waveguide_radius=10, propagation_length=100, filen
 
     num_frames = intensities.shape[0]
     unit_propagation_length = propagation_length / num_frames
+
+    # vmin = np.min(intensities)
+    # vmax = np.max(intensities)
     plt.figure()
     for i in range(num_frames):
 
@@ -453,10 +455,10 @@ def make_3d_animation(fields, waveguide_radius=10, propagation_length=100, filen
 
         extent = [-waveguide_radius/1e-6, waveguide_radius/1e-6, -waveguide_radius/1e-6, waveguide_radius/1e-6]
 
-        fig, ax = plt.subplots(figsize=(6, 6))
+        fig, ax = plt.subplots(figsize=(8, 6))
         ax.imshow(intensities[i], cmap='turbo', norm=norm, origin='lower', extent=extent, interpolation=interpolation)
-        plt.xlabel(r'x ($\mu m$)')
-        plt.ylabel(r'y ($\mu m$)')
+        plt.xlabel(r'x ($\mu m$)', fontsize=18)
+        plt.ylabel(r'y ($\mu m$)', fontsize=18)
 
         # Only plot the half of the image
         if roi is not None:
@@ -466,6 +468,13 @@ def make_3d_animation(fields, waveguide_radius=10, propagation_length=100, filen
             ax.set_xlim([-waveguide_radius/1e-6, waveguide_radius/1e-6])
             ax.set_ylim([-waveguide_radius/1e-6, waveguide_radius/1e-6])
 
+        ax.set_xticks([-roi/1e-6, 0, roi/1e-6])
+        ax.set_yticks([-roi/1e-6, 0, roi/1e-6])
+
+        # ticks fontsize
+        ax.tick_params(axis='both', which='major', labelsize=18)
+        ax.tick_params(axis='both', which='minor', labelsize=18)
+
         waveguide = Circle((0, 0), waveguide_radius/1e-6, fill=False, linestyle='--', edgecolor='white', linewidth=2.0)
         ax.add_patch(waveguide)
         
@@ -473,9 +482,12 @@ def make_3d_animation(fields, waveguide_radius=10, propagation_length=100, filen
 
         # At each frame, place text at the top right corner with the current propagation distance dz*i
         current_z = i * unit_propagation_length  # Adjust this value based on your simulation parameters
-        ax.text(0.98, 0.98, f'z = {current_z:.2f} cm', transform=ax.transAxes, ha='right', va='top', fontsize=15, color='white')
+        ax.text(0.95, 0.95, f'z = {current_z:.2f} cm', transform=ax.transAxes, ha='right', va='top', fontsize=22, color='white')
         # Save frame
-        plt.savefig(f'frames/frame_{i:03d}.png')
+        # if i in (0, 277, 554, 831):
+        #     plt.savefig(f'frames/frame_{i:03d}.svg', format='svg', bbox_inches='tight', dpi=300)
+        # else:
+        plt.savefig(f'frames/frame_{i:03d}.png', format='png', bbox_inches='tight')
         plt.close()
 
     fps = 10  # Frames per second

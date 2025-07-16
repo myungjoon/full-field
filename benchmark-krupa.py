@@ -15,8 +15,8 @@ parser = argparse.ArgumentParser(description='Simulation parameters')
 parser.add_argument('--seed', type=int, default=45, help='Random seed for reproducibility')
 parser.add_argument('--input_type', type=str, default='mode', choices=['gaussian', 'mode'], help='Input type')
 parser.add_argument('--basis', type=str, default='LP', choices=['LP', 'LG'], help='Basis for modes')
-parser.add_argument('--num_modes', type=int, default=6, help='Number of input modes')
-parser.add_argument('--total_power', type=float, default=500e3, help='Total power (W)')
+parser.add_argument('--num_modes', type=int, default=1, help='Number of input modes')
+parser.add_argument('--total_power', type=float, default=160e3, help='Total power (W)')
 parser.add_argument('--beam_radius', type=float, default=25e-6, help='Beam radius (m)')
 parser.add_argument('--position', type=str, default='on', choices=['on', 'off'], help='Beam position')
 parser.add_argument('--disorder', type=bool, default=False, help='Disorder in the fiber')
@@ -64,16 +64,16 @@ NA = 0.25
 n_clad = 1.45
 n_core = np.sqrt(NA**2 + n_clad**2)
 n2 = 3.2e-20 * 2 # factor 2 for the estimantion of GRIN rod material property
-waveguide_radius = 450e-6
-propagation_length = 1.0
+waveguide_radius = 25e-6
+propagation_length = 0.01
 
 # Simulation domain parameters
 Lx, Ly = 3 * waveguide_radius, 3 * waveguide_radius
 unit = 1e-6
-Nx, Ny = 2048, 2048
+Nx, Ny = 1024, 1024
 print(f'The grid size is {Nx}x{Ny}')
 ds_factor = round(Nx / 512) if Nx >= 512 else 1 # downsampling factor for memory efficiency
-dz = 1e-5
+dz = 5e-6
 
 mode_decompose = False
 domain = Domain(Lx, Ly, Nx, Ny, propagation_length, device=device)
@@ -92,51 +92,12 @@ else:
     cx = 0
     cy = 0
 
-modes = np.load('modes_2048.npy')
-modes = torch.tensor(modes, dtype=torch.complex64, device=device)
-num_mode = 6
 
-# coefficients with random phase
-input_type = 'custom'
-coefficients = torch.tensor([0.3, 0.3, 0.3, 0.2, 0.1, 0.1]) # data1
-# coefficients = torch.tensor([0.4, 0.3, 0.3, 0.2, 0.3, 0.2]) # data2
-coefficients = coefficients.reshape((num_mode,1,1)) * np.exp(1j * np.random.uniform(0, 1.0 * np.pi, (num_mode, 1, 1)))
-coefficients = coefficients.to(device)
-fields = torch.sum(coefficients * modes[:num_mode], dim=0)
 
-if Nx == 4096:
-    fields = fields.cpu().numpy()
-    real_upsampled = zoom(fields.real, zoom=2, order=3)
-    imag_upsampled = zoom(fields.imag, zoom=2, order=3)
-    fields = real_upsampled + 1j * imag_upsampled
-    fields = torch.tensor(fields, dtype=torch.complex128, device=device)
-
-# cx1 = 0
-# cy1 = waveguide_radius / 4
-
-# cx2 = waveguide_radius / 4
-# cy2 = 0
-
-# gaussian_beam_1 = Input(domain, wvl0, n_core, n_clad, 
-#                     input_type=input_type, beam_radius=beam_radius, cx=cx1, cy=cy1, 
-#                     power=total_power, device=device)
-
-# gaussian_beam_2 = Input(domain, wvl0, n_core, n_clad,
-#                     input_type=input_type, beam_radius=beam_radius, cx=cx2, cy=cy2, 
-#                     power=total_power, device=device)
-
-# gaussian_1 = gaussian_beam_1.field
-# gaussian_2 = gaussian_beam_2.field
-
-# fields = gaussian_1 + gaussian_2
-
-# coefficients = torch.tensor([0.3, 0.7, 0.5, 0.5, 0.6, 0.4]) # Coefficients for the LG modes
 input_beam = Input(domain, wvl0, n_core, n_clad, phase_modulation=False, 
                     input_type=input_type,
-                    basis=basis, coefficients=coefficients,
                     cx=cx, cy=cy, scale=scale, beam_radius=beam_radius,
                     power=total_power, num_modes=num_modes, waveguide_radius=waveguide_radius, device=device,
-                    custom_fields=fields,
                     )
 # input_beam.field = fields
 

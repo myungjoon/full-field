@@ -68,7 +68,7 @@ n_clad = 1.45
 n_core = np.sqrt(NA**2 + n_clad**2)
 n2 = 3.2e-20 # factor 2 for the estimantion of GRIN rod material property
 fiber_radius = 26e-6
-propagation_length = 0.15
+propagation_length = 0.1
 
 # Simulation domain parameters
 Lx, Ly = 4*fiber_radius, 4*fiber_radius
@@ -79,9 +79,9 @@ ds_factor = 8 if Nx >= 2048 else 1 # downsampling factor for memory efficiency
 dz = 1e-5
 
 # Time domain
-Nt = 2**10
+Nt = 2**9
 time_window = 7.5
-dt = 1e-6  # time step in seconds
+dt = time_window / Nt  # time step in seconds
 
 beta2 = 16.55e-27
 
